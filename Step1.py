@@ -1,23 +1,40 @@
-#%%
-""" Creation of the uncertainty scenarios related to the need
-for up and down regulation """
+import numpy as np
+import pandas as pd
+import usefulfunctions as uf
 
-import random
+seed = 42
+rng = np.random.default_rng(seed)
 
-num_scenarios = 4
-hours = 24
-random.seed(42) # This is added for reproducibility
-scenarios = [
-    [random.randint(0, 1) for _ in range(hours)]
-    for _ in range(num_scenarios)
-]
+# Generate scenarios
+scenarios = uf.generate_scenarios(random_state=rng)
 
-for i, scenario in enumerate(scenarios, start=1):
-    print(f"Scenario {i}: {scenario}")
-# SI=1 represents supply deficit and SI=0 represents supply surplus.
-#%% Balancing prices for up and down regulation
 
-# If the system is in deficit: BP = 1.25 × DA price.
-# If the system is in surplus: BP = 0.85 × DA price.
+#%% ----------------------
+# Task 1.1) Offering Strategy Under a One-Price Balancing Scheme
+# ------------------------
 
-# Renewables in electricity markets
+# Pick 100 random scenarios
+idx = rng.choice(scenarios.shape[1], size=100, replace=False)
+in_sample_scenarios = scenarios[:, idx, :]
+
+# Solve optimization problem
+m, p_DA, Delta = uf.solve_stochastic_strategy_one_price(in_sample_scenarios)
+
+# Print values
+p_DA_values = np.array([v.X for v in p_DA.values()])
+print("Expected Profit (One-Price):", round(m.ObjVal, 3), "MDKK")
+print("Day-Ahead offers:", p_DA_values)
+
+
+#%% ----------------------
+# Task 1.2) Offering Strategy Under a Two-Price Balancing Scheme
+# ------------------------
+
+# Use same 100 random scenarios as in Task 1.1
+# Solve optimization problem
+m_2, p_DA_2, Delta_up, Delta_down = uf.solve_stochastic_strategy_two_price(in_sample_scenarios)
+
+# Print values
+p_DA_2_values = np.array([v.X for v in p_DA_2.values()])
+print("Expected Profit (Two-Price):", round(m_2.ObjVal,3), "MDKK")
+print("Day-Ahead offers:", p_DA_2_values)

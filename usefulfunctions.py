@@ -1,33 +1,102 @@
-def scenario_generator():
+def generate_scenarios(random_state=None):
     import pandas as pd
-    # Extract wind data
-    wind_data = pd.read_csv("Data/ninja_wind_55.5783_15.7764_corrected.csv", comment='#', parse_dates=['time', 'local_time'])
+    import numpy as np
 
+    rng = np.random.default_rng(random_state)
+
+    # Extract wind data
+    wind_data = pd.read_csv(
+        "Data/ninja_wind_55.5783_15.7764_corrected.csv",
+        comment='#',
+        parse_dates=['time', 'local_time']
+    )
+    wind_data["electricity_mwh"] = wind_data["electricity"] * 1e-3
     wind_data.drop(columns=["local_time"], inplace=True)
 
-    # Turn into 
+    wind_data["section"] = (wind_data["time"].dt.dayofyear - 1) // 18
 
+    selected_days = []
+    wind_scenarios = []
 
+    for section in range(20):
+        section_data = wind_data[wind_data["section"] == section]
 
+        random_day = rng.choice(section_data["time"].dt.dayofyear.unique())
+        selected_days.append(random_day)
+
+        scenario = section_data[section_data["time"].dt.dayofyear == random_day].copy()
+        scenario["hour"] = scenario["time"].dt.hour
+        scenario = scenario[["hour", "electricity_mwh"]]
+
+        wind_scenarios.append(scenario["electricity_mwh"].values)
+
+    # Extract price data
+    price_data = pd.read_csv("Data/DayAheadPrices_DK2.csv", sep=";", decimal=",")
+    price_data["SpotPriceMDKK"] = price_data["SpotPriceDKK"] * 1e-6
+    price_data.drop(columns=["HourUTC", "PriceArea", "SpotPriceEUR"], inplace=True)
+    price_data["HourDK"] = pd.to_datetime(price_data["HourDK"])
+
+    price_data["dayofyear"] = price_data["HourDK"].dt.dayofyear
+
+    price_data_filtered = price_data[~price_data["dayofyear"].isin(selected_days)].copy()
+    price_data_filtered["section"] = (price_data_filtered["HourDK"].dt.dayofyear - 1) // 18
+
+    price_scenarios = []
+
+    for section in range(20):
+        section_data = price_data_filtered[price_data_filtered["section"] == section]
+
+        random_day = rng.choice(section_data["dayofyear"].unique())
+
+        scenario = section_data[section_data["dayofyear"] == random_day].copy()
+        scenario["hour"] = scenario["HourDK"].dt.hour
+        scenario = scenario[["hour", "SpotPriceMDKK"]]
+        scenario = scenario.sort_values("hour")
+
+        price_scenarios.append(scenario["SpotPriceMDKK"].values)
+
+    # Surplus/deficit scenarios
+    surp_def_scenarios = rng.integers(0, 2, size=(4, 24))
+
+    # Build combined scenarios
+    all_scenarios = [
+        (w_i, p_i, sd_i)
+        for w_i in range(len(wind_scenarios))
+        for p_i in range(len(price_scenarios))
+        for sd_i in range(len(surp_def_scenarios))
+    ]
+
+    n_hours = 24
+    n_scenarios = len(all_scenarios)
+
+    data = np.zeros((n_hours, n_scenarios, 3))
+
+    for s, (w_i, p_i, sd_i) in enumerate(all_scenarios):
+        data[:, s, 0] = wind_scenarios[w_i]
+        data[:, s, 1] = price_scenarios[p_i]
+        data[:, s, 2] = surp_def_scenarios[sd_i]
+
+    return data
 
 
 def solve_stochastic_strategy_one_price(in_sample_scenarios):
     import gurobipy as gp
 
+    P_nom = 500
+    p_real = in_sample_scenarios[:,:,0]
+    lambda_DA = in_sample_scenarios[:,:,1]
+    deficit_bin = in_sample_scenarios[:,:,2]
+
     m = gp.Model("stochastic_one_price")
     m.Params.OutputFlag = 0
 
-    n_hours = 24
-    n_scenarios = 1600
+    n_hours = len(in_sample_scenarios[:, 0, 0])
+    n_scenarios = len(in_sample_scenarios[0, :, 0])
     prob_scenarios = 1 / n_scenarios
 
     # (scenarios, hours, parameters)
 
     # Parameters
-    P_nom = 500 
-    lambda_DA = in_sample_scenarios[:,:,1] # fix how it is extracted
-    p_real = in_sample_scenarios[:,:,2]
-    deficit_bin = in_sample_scenarios[:,:,3]
     lambda_bal = 1.25 * lambda_DA * deficit_bin + 0.85 * lambda_DA * (1 - deficit_bin) 
 
     # Variables
@@ -59,19 +128,19 @@ def solve_stochastic_strategy_one_price(in_sample_scenarios):
 
 def solve_stochastic_strategy_two_price(in_sample_scenarios):
     import gurobipy as gp
+    p_real = in_sample_scenarios[:,:,0]
+    lambda_DA = in_sample_scenarios[:,:,1]
+    deficit_bin = in_sample_scenarios[:,:,2]
 
     m = gp.Model("stochastic_two_price")
     m.Params.OutputFlag = 0
 
-    n_hours = 24
-    n_scenarios = 1600
+    n_hours = len(in_sample_scenarios[:, 0, 0])
+    n_scenarios = len(in_sample_scenarios[0, :, 0])
     prob_scenarios = 1 / n_scenarios
 
     # Parameters
     P_nom = 500 
-    lambda_DA = in_sample_scenarios[:,:,1] # fix how it is extracted
-    p_real = in_sample_scenarios[:,:,2]
-    deficit_bin = in_sample_scenarios[:,:,3]
     lambda_bal_up   = deficit_bin * lambda_DA + (1 - deficit_bin) * 0.85 * lambda_DA
     lambda_bal_down = deficit_bin * 1.25 * lambda_DA + (1 - deficit_bin) * lambda_DA
 
@@ -88,8 +157,6 @@ def solve_stochastic_strategy_two_price(in_sample_scenarios):
             - lambda_bal_down[t, s] * Delta_down[t, s])
         for t in range(n_hours) for s in range(n_scenarios)))
 
-    # Constraints
-
     # Capacity limit 
     for t in range(n_hours):
         m.addConstr(p_DA[t] <= P_nom, name=f"Capacity_limit_{t}")
@@ -97,10 +164,17 @@ def solve_stochastic_strategy_two_price(in_sample_scenarios):
     # Constraints setting limits for Delta up and down
     for t in range(n_hours):
         for s in range(n_scenarios):
+            #m.addConstr(Delta_up[t, s] - Delta_down[t, s] == p_real[t, s] - p_DA[t])
             m.addConstr(Delta[t, s] == p_real[t, s] - p_DA[t], name=f"Difference_DA_real_{t}_{s}")
             m.addConstr(Delta[t, s] == Delta_up[t, s] - Delta_down[t, s], name=f"Difference_split_{t}_{s}")
-            m.addConstr(Delta_up[t, s] >= 0, name=f"Difference_up_{t}_{s}")
-            m.addConstr(Delta_down[t, s] >= 0, name=f"Difference_down_{t}_{s}")
+
+    b = m.addVars(n_hours, n_scenarios, vtype=gp.GRB.BINARY, name="split_bin")
+    M = P_nom  # natural upper bound, since imbalance can't exceed wind capacity
+
+    for t in range(n_hours):
+        for s in range(n_scenarios):
+            m.addConstr(Delta_up[t, s]   <= M * b[t, s])
+            m.addConstr(Delta_down[t, s] <= M * (1 - b[t, s]))
 
     # Optimize
     m.optimize()
