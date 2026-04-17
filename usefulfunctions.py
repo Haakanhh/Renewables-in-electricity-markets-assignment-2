@@ -81,8 +81,10 @@ def generate_scenarios(random_state=None):
 
 def solve_stochastic_strategy_one_price(in_sample_scenarios):
     import gurobipy as gp
+    import numpy as np
 
     P_nom = 500
+    # in_sample_scenarios has shape (n_hours, n_scenarios, 3)
     p_real = in_sample_scenarios[:,:,0]
     lambda_DA = in_sample_scenarios[:,:,1]
     deficit_bin = in_sample_scenarios[:,:,2]
@@ -94,8 +96,6 @@ def solve_stochastic_strategy_one_price(in_sample_scenarios):
     n_scenarios = len(in_sample_scenarios[0, :, 0])
     prob_scenarios = 1 / n_scenarios
 
-    # (scenarios, hours, parameters)
-
     # Parameters
     lambda_bal = 1.25 * lambda_DA * deficit_bin + 0.85 * lambda_DA * (1 - deficit_bin) 
 
@@ -106,7 +106,7 @@ def solve_stochastic_strategy_one_price(in_sample_scenarios):
     m.setObjective(gp.quicksum(prob_scenarios * 
                                 (lambda_DA[t, s] * p_DA[t]
                                  + lambda_bal[t, s] * Delta[t, s])
-                                for t in range(n_hours) for s in range(n_scenarios)))
+                                for t in range(n_hours) for s in range(n_scenarios)), gp.GRB.MAXIMIZE)
 
 
     # Constraints
@@ -123,11 +123,26 @@ def solve_stochastic_strategy_one_price(in_sample_scenarios):
     # Optimize
     m.optimize()
 
-    return m, p_DA, Delta
+    runtime_sec    = m.Runtime
+    num_vars       = int(m.NumVars)
+    num_constrs    = int(m.NumConstrs)
+
+    print(f"  Computational time:    {runtime_sec:.6f} s")
+    print(f"  Decision variables:    {num_vars}")
+    print(f"  Constraints:           {num_constrs}")
+
+    p_DA_vec = np.array([p_DA[t].X for t in range(n_hours)])
+    Delta_mat = np.array([[Delta[t, s].X for s in range(n_scenarios)] for t in range(n_hours)])
+    profit_matrix = lambda_DA * p_DA_vec[:, None] + lambda_bal * Delta_mat
+
+    return m, p_DA, Delta, profit_matrix
 
 
 def solve_stochastic_strategy_two_price(in_sample_scenarios):
     import gurobipy as gp
+    import numpy as np
+
+    # in_sample_scenarios has shape (n_hours, n_scenarios, 3)
     p_real = in_sample_scenarios[:,:,0]
     lambda_DA = in_sample_scenarios[:,:,1]
     deficit_bin = in_sample_scenarios[:,:,2]
@@ -155,7 +170,7 @@ def solve_stochastic_strategy_two_price(in_sample_scenarios):
             lambda_DA[t, s] * p_DA[t]
             + lambda_bal_up[t, s]   * Delta_up[t, s]
             - lambda_bal_down[t, s] * Delta_down[t, s])
-        for t in range(n_hours) for s in range(n_scenarios)))
+        for t in range(n_hours) for s in range(n_scenarios)),  gp.GRB.MAXIMIZE)
 
     # Capacity limit 
     for t in range(n_hours):
@@ -178,4 +193,35 @@ def solve_stochastic_strategy_two_price(in_sample_scenarios):
 
     # Optimize
     m.optimize()
-    return m, p_DA, Delta_up, Delta_down
+    
+    runtime_sec    = m.Runtime
+    num_vars       = int(m.NumVars)
+    num_constrs    = int(m.NumConstrs)
+
+    print(f"  Computational time:    {runtime_sec:.6f} s")
+    print(f"  Decision variables:    {num_vars}")
+    print(f"  Constraints:           {num_constrs}")
+
+
+    p_DA_vec = np.array([p_DA[t].X for t in range(n_hours)])
+    Delta_up_mat = np.array([[Delta_up[t, s].X for s in range(n_scenarios)] for t in range(n_hours)])
+    Delta_down_mat = np.array([[Delta_down[t, s].X for s in range(n_scenarios)] for t in range(n_hours)])
+
+    profit_matrix = (lambda_DA * p_DA_vec[:, None] + lambda_bal_up * Delta_up_mat - lambda_bal_down * Delta_down_mat)
+
+    return m, p_DA, Delta_up, Delta_down, profit_matrix
+
+
+def plot_profit_distribution(profit_per_scenario, n_bins = 15, title="Profit distribution per scenario"):
+    import matplotlib.pyplot as plt
+
+    plt.figure(figsize=(10,6))
+    plt.hist(profit_per_scenario, bins=n_bins)
+    plt.axvline(profit_per_scenario.mean(), color='red', linestyle='dashed', label=f"Mean: {profit_per_scenario.mean():.2f} MDKK")
+    plt.title(title, fontsize=22)
+    plt.xlabel("Total profit (MDKK)", fontsize=16)
+    plt.ylabel("Frequency", fontsize=16)
+    plt.xticks(fontsize=14)
+    plt.yticks(fontsize=14)
+    plt.legend(fontsize=16)
+    plt.show()
