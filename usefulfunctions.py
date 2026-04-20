@@ -240,7 +240,7 @@ def solve_stochastic_strategy_two_price(in_sample_scenarios):
 
     return m, p_DA, Delta_up, Delta_down, profit_matrix
 
-def plot_DA_offers(p_DA, in_sample_scenarios, title="Day-ahead offers"):
+def plot_DA_offers(p_DA, in_sample_scenarios, title="Day-ahead offers", Threshold_value=None):
     # Average forecasted wind production per hour (24-hour profile)
     avg_forecasted_wind_per_hour = in_sample_scenarios[:, :, 0].mean(axis=1)
     df_avg_forecasted_wind = pd.DataFrame({
@@ -248,21 +248,61 @@ def plot_DA_offers(p_DA, in_sample_scenarios, title="Day-ahead offers"):
         "avg_forecasted_wind_mwh": avg_forecasted_wind_per_hour
     })
 
+    avg_deficit_prediction_per_hour = in_sample_scenarios[:, :, 2].mean(axis=1)
+    df_avg_deficit_prediction = pd.DataFrame({
+        "hour": np.arange(24),
+        "avg_deficit_prediction": avg_deficit_prediction_per_hour
+    })
+
     hours = np.arange(24)
 
-    plt.figure(figsize=(12, 6))
-    plt.step(hours, p_DA, where="post", marker="o", linewidth=2, label="Offering capacity")
-    plt.step(hours, avg_forecasted_wind_per_hour, where="post", marker="s", linewidth=2, label="Avg. forecasted wind production")
+    fig, (ax1, ax2) = plt.subplots(
+        2, 1, sharex=True, figsize=(12, 8),
+        gridspec_kw={"height_ratios": [3, 2]}
+    )
 
-    plt.title(title, fontsize=16)
-    plt.xlabel("Hour", fontsize=12)
-    plt.ylabel("Power (MW)", fontsize=12)
-    plt.xticks(np.arange(24))
-    plt.xlim(0, 23)
-    plt.ylim(0, 550)
-    plt.grid(True, alpha=0.3)
-    plt.legend()
-    plt.tight_layout()
+    # Top subplot: offering + avg forecasted wind
+    ax1.step(hours, p_DA, where="post", marker="o", linewidth=2, label="Offering capacity")
+    ax1.step(
+        hours,
+        avg_forecasted_wind_per_hour,
+        where="post",
+        marker="s",
+        linewidth=2,
+        label="Avg. forecasted wind production"
+    )
+    ax1.set_title(title, fontsize=16)
+    ax1.set_xlabel("Hour", fontsize=12)
+    ax1.set_ylabel("Power (MW)", fontsize=12)
+    ax1.set_xticks(np.arange(24))
+    ax1.set_xlim(0, 23)
+    ax1.tick_params(labelbottom=True)
+    ax1.set_ylim(0, 550)
+    ax1.grid(True, alpha=0.3)
+    ax1.legend(loc="upper center", bbox_to_anchor=(0.5, -0.12), ncol=2)
+
+    # Bottom subplot: avg deficit prediction
+    ax2.step(
+        hours,
+        avg_deficit_prediction_per_hour,
+        where="post",
+        color="tab:red",
+        marker="o",
+        linewidth=2,
+        label="Avg. deficit prediction"
+    )
+    ax2.set_xlabel("Hour", fontsize=12)
+    ax2.set_ylabel("Deficit probability", fontsize=12)
+    ax2.set_xticks(np.arange(24))
+    ax2.set_xlim(0, 23)
+    ax2.set_ylim(0, 1.05)
+    if Threshold_value is not None:
+        ax2.axhline(Threshold_value, color="black", linestyle="--", linewidth=1, label=f"P_deficit = {Threshold_value}")
+    ax2.grid(True, alpha=0.3)
+    ax2.legend(loc="upper center", bbox_to_anchor=(0.5, -0.22), ncol=2)
+
+    fig.tight_layout()
+    fig.subplots_adjust(bottom=0.2)
     plt.show()
 
 
@@ -278,6 +318,35 @@ def plot_profit_distribution(profit_per_scenario, n_bins = 15, title="Profit dis
     plt.yticks(fontsize=14)
     plt.legend(fontsize=16)
     plt.show()
+
+def plot_cumulative_profit_distribution(profit_per_scenario, title="Cumulative profit distribution"):
+    plt.figure(figsize=(12, 6))
+
+    # Exact empirical CDF (no binning)
+    sorted_profit = np.sort(np.asarray(profit_per_scenario))
+    n = sorted_profit.size
+    cdf = np.arange(1, n + 1) / n
+
+    plt.step(sorted_profit, cdf, where="post", linewidth=2, label="Empirical CDF")
+
+    mean_profit = sorted_profit.mean()
+    plt.axvline(
+        mean_profit,
+        color="red",
+        linestyle="dashed",
+        label=f"Mean: {mean_profit:.2f} MDKK"
+    )
+
+    plt.title(title, fontsize=18)
+    plt.xlabel("Total profit (MDKK)", fontsize=14)
+    plt.ylabel("Cumulative probability", fontsize=14)
+    plt.xticks(fontsize=14)
+    plt.yticks(fontsize=14)
+    plt.ylim(0, 1.02)
+    plt.grid(True, alpha=0.3)
+    plt.legend(fontsize=14)
+    plt.show()
+
 
 def plot_profit_distribution_comparison(profit_per_scenario, profit_per_scenario_2, n_bins=15):
 
