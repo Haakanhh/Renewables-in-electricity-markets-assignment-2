@@ -317,29 +317,29 @@ def create_folds(scenarios, n_in_sample, seed=42):
 
     return folds
 
-def calculate_profit(scenarios, p_DA, two_price=False):
+def calculate_profit(scenarios_in, scenarios_out, p_DA, two_price=False):
 
     # scenarios shape: (n_hours, n_scenarios, 3)
-    p_real = scenarios[:, :, 0]
-    lambda_DA = scenarios[:, :, 1]
-    deficit_bin = scenarios[:, :, 2]
+    p_real_out = scenarios_out[:, :, 0]
+    lambda_DA_out = scenarios_out[:, :, 1]
+    deficit_bin_out = scenarios_out[:, :, 2]
 
     # Reconstruct p_DA as vector
     # (since it's a gurobi dict)
-    n_hours = scenarios.shape[0]
+    n_hours = scenarios_out.shape[0]
     p_DA_vec = np.array([p_DA[t].X for t in range(n_hours)])
 
     if two_price:
         # Balancing price
-        lambda_bal_up   = deficit_bin * lambda_DA + (1 - deficit_bin) * 0.85 * lambda_DA
-        lambda_bal_down = deficit_bin * 1.25 * lambda_DA + (1 - deficit_bin) * lambda_DA
-        Delta = p_real - p_DA_vec[:, None]
+        lambda_bal_up   = deficit_bin_out * lambda_DA_out + (1 - deficit_bin_out) * 0.85 * lambda_DA_out
+        lambda_bal_down = deficit_bin_out * 1.25 * lambda_DA_out + (1 - deficit_bin_out) * lambda_DA_out
+        Delta = p_real_out - p_DA_vec[:, None]
 
         Delta_up = np.maximum(Delta, 0)
         Delta_down = np.maximum(-Delta, 0)
 
         profit_matrix = (
-            lambda_DA * p_DA_vec[:, None]
+            lambda_DA_out * p_DA_vec[:, None]
             + lambda_bal_up * Delta_up
             - lambda_bal_down * Delta_down
         )
@@ -350,13 +350,13 @@ def calculate_profit(scenarios, p_DA, two_price=False):
 
     else:
         # Balancing price
-        lambda_bal = 1.25 * lambda_DA * deficit_bin + 0.85 * lambda_DA * (1 - deficit_bin)
+        lambda_bal = 1.25 * lambda_DA_out * deficit_bin_out + 0.85 * lambda_DA_out * (1 - deficit_bin_out)
 
         # Compute Delta = p_real - p_DA
-        Delta = p_real - p_DA_vec[:, None]
+        Delta = p_real_out - p_DA_vec[:, None]
 
         # Profit per hour & scenario
-        profit_matrix = lambda_DA * p_DA_vec[:, None] + lambda_bal * Delta
+        profit_matrix = lambda_DA_out * p_DA_vec[:, None] + lambda_bal * Delta
 
         # Return total profit per scenario
         profit_per_scenario = profit_matrix.sum(axis=0)
