@@ -1,7 +1,9 @@
-def generate_scenarios(random_state=None):
-    import pandas as pd
-    import numpy as np
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import gurobipy as gp
 
+def generate_scenarios(random_state=None, n_wind=20, n_price=20, n_surp_def=4):
     rng = np.random.default_rng(random_state)
 
     # Extract wind data
@@ -10,15 +12,30 @@ def generate_scenarios(random_state=None):
         comment='#',
         parse_dates=['time', 'local_time']
     )
+
+    # REMOVE DAYS WITH 23 OR 25 HOURS
+    wind_data["dayofyear"] = wind_data["time"].dt.dayofyear
+    wind_data["hour"] = wind_data["time"].dt.hour
+
+    # keep only days with exactly 24 observations
+    valid_wind_days = (
+        wind_data.groupby("dayofyear")["hour"]
+        .count()
+        .pipe(lambda x: x[x == 24].index)
+    )
+
+    wind_data = wind_data[wind_data["dayofyear"].isin(valid_wind_days)].copy()
+
     wind_data["electricity_mwh"] = wind_data["electricity"] * 1e-3
     wind_data.drop(columns=["local_time"], inplace=True)
 
-    wind_data["section"] = (wind_data["time"].dt.dayofyear - 1) // 18
-
+    days_per_section = 365 / n_wind
+    wind_data["section"] = ((wind_data["time"].dt.dayofyear - 1) // days_per_section).astype(int)
+    
     selected_days = []
     wind_scenarios = []
 
-    for section in range(20):
+    for section in range(n_wind):
         section_data = wind_data[wind_data["section"] == section]
 
         random_day = rng.choice(section_data["time"].dt.dayofyear.unique())
@@ -36,14 +53,27 @@ def generate_scenarios(random_state=None):
     price_data.drop(columns=["HourUTC", "PriceArea", "SpotPriceEUR"], inplace=True)
     price_data["HourDK"] = pd.to_datetime(price_data["HourDK"])
 
+    # REMOVE DAYS WITH 23 OR 25 HOURS
     price_data["dayofyear"] = price_data["HourDK"].dt.dayofyear
+    price_data["hour"] = price_data["HourDK"].dt.hour
+
+    valid_price_days = (
+        price_data.groupby("dayofyear")["hour"]
+        .count()
+        .pipe(lambda x: x[x == 24].index)
+    )
+
+    price_data = price_data[price_data["dayofyear"].isin(valid_price_days)].copy()
 
     price_data_filtered = price_data[~price_data["dayofyear"].isin(selected_days)].copy()
-    price_data_filtered["section"] = (price_data_filtered["HourDK"].dt.dayofyear - 1) // 18
-
+    price_data_filtered["section"] = pd.cut(
+        price_data_filtered["HourDK"].dt.dayofyear - 1,
+        bins=n_price,
+        labels=False
+    )
     price_scenarios = []
 
-    for section in range(20):
+    for section in range(n_price):
         section_data = price_data_filtered[price_data_filtered["section"] == section]
 
         random_day = rng.choice(section_data["dayofyear"].unique())
@@ -56,7 +86,7 @@ def generate_scenarios(random_state=None):
         price_scenarios.append(scenario["SpotPriceMDKK"].values)
 
     # Surplus/deficit scenarios
-    surp_def_scenarios = rng.integers(0, 2, size=(4, 24))
+    surp_def_scenarios = rng.integers(0, 2, size=(n_surp_def, 24))
 
     # Build combined scenarios
     all_scenarios = [
@@ -79,11 +109,8 @@ def generate_scenarios(random_state=None):
     return data
 
 
-def solve_stochastic_strategy_one_price(in_sample_scenarios):
-    import gurobipy as gp
-    import numpy as np
-
-    P_nom = 500
+def solve_stochastic_strategy_one_price(in_sample_scenarios, silent=False):
+    
     # in_sample_scenarios has shape (n_hours, n_scenarios, 3)
     p_real = in_sample_scenarios[:,:,0]
     lambda_DA = in_sample_scenarios[:,:,1]
@@ -92,25 +119,25 @@ def solve_stochastic_strategy_one_price(in_sample_scenarios):
     m = gp.Model("stochastic_one_price")
     m.Params.OutputFlag = 0
 
+    # Parameters
+    P_nom = 500
     n_hours = len(in_sample_scenarios[:, 0, 0])
     n_scenarios = len(in_sample_scenarios[0, :, 0])
     prob_scenarios = 1 / n_scenarios
-
-    # Parameters
     lambda_bal = 1.25 * lambda_DA * deficit_bin + 0.85 * lambda_DA * (1 - deficit_bin) 
 
     # Variables
     p_DA = m.addVars(n_hours, lb=0, name="DayAhead offer")
     Delta = m.addVars(n_hours, n_scenarios, lb=-gp.GRB.INFINITY, ub=gp.GRB.INFINITY, name="Difference_DA_real")
 
+    # Objective
     m.setObjective(gp.quicksum(prob_scenarios * 
                                 (lambda_DA[t, s] * p_DA[t]
                                  + lambda_bal[t, s] * Delta[t, s])
                                 for t in range(n_hours) for s in range(n_scenarios)), gp.GRB.MAXIMIZE)
 
 
-    # Constraints
-    # Capacity limit 
+    # Capacity limit constraint
     for t in range(n_hours):
         m.addConstr(p_DA[t] <= P_nom, name=f"Capacity_limit_{t}")
 
@@ -123,14 +150,16 @@ def solve_stochastic_strategy_one_price(in_sample_scenarios):
     # Optimize
     m.optimize()
 
-    runtime_sec    = m.Runtime
-    num_vars       = int(m.NumVars)
-    num_constrs    = int(m.NumConstrs)
+    if silent == False:
+        # Print computational details
+        runtime_sec    = m.Runtime
+        num_vars       = int(m.NumVars)
+        num_constrs    = int(m.NumConstrs)
+        print(f"  Computational time:    {runtime_sec:.6f} s")
+        print(f"  Decision variables:    {num_vars}")
+        print(f"  Constraints:           {num_constrs}")
 
-    print(f"  Computational time:    {runtime_sec:.6f} s")
-    print(f"  Decision variables:    {num_vars}")
-    print(f"  Constraints:           {num_constrs}")
-
+    # Compute profit per hour and scenario
     p_DA_vec = np.array([p_DA[t].X for t in range(n_hours)])
     Delta_mat = np.array([[Delta[t, s].X for s in range(n_scenarios)] for t in range(n_hours)])
     profit_matrix = lambda_DA * p_DA_vec[:, None] + lambda_bal * Delta_mat
@@ -139,8 +168,6 @@ def solve_stochastic_strategy_one_price(in_sample_scenarios):
 
 
 def solve_stochastic_strategy_two_price(in_sample_scenarios):
-    import gurobipy as gp
-    import numpy as np
 
     # in_sample_scenarios has shape (n_hours, n_scenarios, 3)
     p_real = in_sample_scenarios[:,:,0]
@@ -150,11 +177,10 @@ def solve_stochastic_strategy_two_price(in_sample_scenarios):
     m = gp.Model("stochastic_two_price")
     m.Params.OutputFlag = 0
 
+    # Parameters
     n_hours = len(in_sample_scenarios[:, 0, 0])
     n_scenarios = len(in_sample_scenarios[0, :, 0])
     prob_scenarios = 1 / n_scenarios
-
-    # Parameters
     P_nom = 500 
     lambda_bal_up   = deficit_bin * lambda_DA + (1 - deficit_bin) * 0.85 * lambda_DA
     lambda_bal_down = deficit_bin * 1.25 * lambda_DA + (1 - deficit_bin) * lambda_DA
@@ -165,6 +191,7 @@ def solve_stochastic_strategy_two_price(in_sample_scenarios):
     Delta_up = m.addVars(n_hours, n_scenarios, lb=0, name="difference over 0")
     Delta_down = m.addVars(n_hours, n_scenarios, lb=0, name="difference under 0")
 
+    # Objective
     m.setObjective(gp.quicksum(
         prob_scenarios * (
             lambda_DA[t, s] * p_DA[t]
@@ -172,7 +199,7 @@ def solve_stochastic_strategy_two_price(in_sample_scenarios):
             - lambda_bal_down[t, s] * Delta_down[t, s])
         for t in range(n_hours) for s in range(n_scenarios)),  gp.GRB.MAXIMIZE)
 
-    # Capacity limit 
+    # Capacity limit constraint
     for t in range(n_hours):
         m.addConstr(p_DA[t] <= P_nom, name=f"Capacity_limit_{t}")
 
@@ -194,27 +221,24 @@ def solve_stochastic_strategy_two_price(in_sample_scenarios):
     # Optimize
     m.optimize()
     
+    # Print computational details
     runtime_sec    = m.Runtime
     num_vars       = int(m.NumVars)
     num_constrs    = int(m.NumConstrs)
-
     print(f"  Computational time:    {runtime_sec:.6f} s")
     print(f"  Decision variables:    {num_vars}")
     print(f"  Constraints:           {num_constrs}")
 
-
+    # Compute profit per hour and scenario
     p_DA_vec = np.array([p_DA[t].X for t in range(n_hours)])
     Delta_up_mat = np.array([[Delta_up[t, s].X for s in range(n_scenarios)] for t in range(n_hours)])
     Delta_down_mat = np.array([[Delta_down[t, s].X for s in range(n_scenarios)] for t in range(n_hours)])
-
     profit_matrix = (lambda_DA * p_DA_vec[:, None] + lambda_bal_up * Delta_up_mat - lambda_bal_down * Delta_down_mat)
 
     return m, p_DA, Delta_up, Delta_down, profit_matrix
 
 
 def plot_profit_distribution(profit_per_scenario, n_bins = 15, title="Profit distribution per scenario"):
-    import matplotlib.pyplot as plt
-
     plt.figure(figsize=(10,6))
     plt.hist(profit_per_scenario, bins=n_bins)
     plt.axvline(profit_per_scenario.mean(), color='red', linestyle='dashed', label=f"Mean: {profit_per_scenario.mean():.2f} MDKK")
@@ -225,3 +249,87 @@ def plot_profit_distribution(profit_per_scenario, n_bins = 15, title="Profit dis
     plt.yticks(fontsize=14)
     plt.legend(fontsize=16)
     plt.show()
+
+def plot_profit_distribution_comparison(profit_per_scenario, profit_per_scenario_2, n_bins=15):
+
+    all_profits = np.concatenate([profit_per_scenario, profit_per_scenario_2])
+    bins = np.linspace(all_profits.min(), all_profits.max(), n_bins)  # 12 bins → 13 edges
+
+    plt.figure(figsize=(10,6))
+
+    plt.hist(profit_per_scenario, bins=bins, alpha=0.5, label="One-price")
+    plt.hist(profit_per_scenario_2, bins=bins, alpha=0.5, label="Two-price")
+
+    plt.axvline(profit_per_scenario.mean(), color='blue', linestyle='dashed')
+    plt.axvline(profit_per_scenario_2.mean(), color='orange', linestyle='dashed')
+
+    plt.title("Profit distribution per scenario: One-price vs Two-price", fontsize=18)
+    plt.xlabel("Total profit (MDKK)", fontsize=14)
+    plt.ylabel("Frequency", fontsize=14)
+
+    plt.legend()
+    plt.show()
+
+def create_folds(scenarios, n_in_sample, seed=42):
+    n_samples = scenarios.shape[1]
+    rng = np.random.default_rng(seed)
+
+    # Shuffle indices
+    indices = np.arange(n_samples)
+    rng.shuffle(indices)
+
+    n_folds = n_samples // n_in_sample
+
+    # Create folds
+    folds = [
+        scenarios[:, indices[i * n_in_sample : (i + 1) * n_in_sample], :]
+        for i in range(n_folds)
+    ]
+
+    return folds
+
+def calculate_profit(scenarios, p_DA, two_price=False):
+
+    # scenarios shape: (n_hours, n_scenarios, 3)
+    p_real = scenarios[:, :, 0]
+    lambda_DA = scenarios[:, :, 1]
+    deficit_bin = scenarios[:, :, 2]
+
+    # Reconstruct p_DA as vector
+    # (since it's a gurobi dict)
+    n_hours = scenarios.shape[0]
+    p_DA_vec = np.array([p_DA[t].X for t in range(n_hours)])
+
+    if two_price:
+        # Balancing price
+        lambda_bal_up   = deficit_bin * lambda_DA + (1 - deficit_bin) * 0.85 * lambda_DA
+        lambda_bal_down = deficit_bin * 1.25 * lambda_DA + (1 - deficit_bin) * lambda_DA
+        Delta = p_real - p_DA_vec[:, None]
+
+        Delta_up = np.maximum(Delta, 0)
+        Delta_down = np.maximum(-Delta, 0)
+
+        profit_matrix = (
+            lambda_DA * p_DA_vec[:, None]
+            + lambda_bal_up * Delta_up
+            - lambda_bal_down * Delta_down
+        )
+
+        profit_per_scenario = profit_matrix.sum(axis=0)
+
+        return profit_per_scenario
+
+    else:
+        # Balancing price
+        lambda_bal = 1.25 * lambda_DA * deficit_bin + 0.85 * lambda_DA * (1 - deficit_bin)
+
+        # Compute Delta = p_real - p_DA
+        Delta = p_real - p_DA_vec[:, None]
+
+        # Profit per hour & scenario
+        profit_matrix = lambda_DA * p_DA_vec[:, None] + lambda_bal * Delta
+
+        # Return total profit per scenario
+        profit_per_scenario = profit_matrix.sum(axis=0)
+
+        return profit_per_scenario
