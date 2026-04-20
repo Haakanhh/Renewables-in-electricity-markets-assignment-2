@@ -27,7 +27,7 @@ print("Expected Profit (One-Price):", round(m.ObjVal, 3), "MDKK")
 print("Day-Ahead offers:", p_DA)
 
 # Plot day-ahead offers
-uf.plot_DA_offers(p_DA_values, in_sample_scenarios, title="Day-ahead offers - One-Price")
+uf.plot_DA_offers(p_DA, in_sample_scenarios, title="Day-ahead offers - One-Price")
 
 # Plot profit distribution per scenario
 profit_per_hour = profit_matrix.mean(axis=1)
@@ -48,7 +48,7 @@ print("Expected Profit (Two-Price):", round(m_2.ObjVal,3), "MDKK")
 print("Day-Ahead offers:", p_DA_2)
 
 # Plot day-ahead offers
-uf.plot_DA_offers(p_DA_2_values, in_sample_scenarios, title="Day-ahead offers - Two-Price")
+uf.plot_DA_offers(p_DA_2, in_sample_scenarios, title="Day-ahead offers - Two-Price")
 
 # Plot profit distribution per scenario
 profit_per_hour_2 = profit_matrix_2.mean(axis=1)
