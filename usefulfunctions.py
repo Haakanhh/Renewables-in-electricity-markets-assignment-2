@@ -49,7 +49,7 @@ def generate_scenarios(random_state=None, n_wind=20, n_price=20, n_surp_def=4):
 
     # Extract price data
     price_data = pd.read_csv("Data/DayAheadPrices_DK2.csv", sep=";", decimal=",")
-    price_data["SpotPriceMDKK"] = price_data["SpotPriceDKK"] * 1e-6
+    price_data["SpotPriceMDKK"] = price_data["SpotPriceDKK"] * 1e-6 # convert to MDKK / MWh
     price_data.drop(columns=["HourUTC", "PriceArea", "SpotPriceEUR"], inplace=True)
     price_data["HourDK"] = pd.to_datetime(price_data["HourDK"])
 
@@ -64,6 +64,9 @@ def generate_scenarios(random_state=None, n_wind=20, n_price=20, n_surp_def=4):
     )
 
     price_data = price_data[price_data["dayofyear"].isin(valid_price_days)].copy()
+
+    # SET NEGATIVE PRICES TO MINIMAL PRICE
+    price_data["SpotPriceMDKK"] = price_data["SpotPriceMDKK"].clip(lower=1e-6)
 
     price_data_filtered = price_data[~price_data["dayofyear"].isin(selected_days)].copy()
     price_data_filtered["section"] = pd.cut(
