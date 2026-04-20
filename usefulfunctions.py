@@ -167,10 +167,10 @@ def solve_stochastic_strategy_one_price(in_sample_scenarios, silent=False):
     Delta_mat = np.array([[Delta[t, s].X for s in range(n_scenarios)] for t in range(n_hours)])
     profit_matrix = lambda_DA * p_DA_vec[:, None] + lambda_bal * Delta_mat
 
-    return m, p_DA, Delta, profit_matrix
+    return m, p_DA_vec, Delta, profit_matrix
 
 
-def solve_stochastic_strategy_two_price(in_sample_scenarios):
+def solve_stochastic_strategy_two_price(in_sample_scenarios, silent=False):
 
     # in_sample_scenarios has shape (n_hours, n_scenarios, 3)
     p_real = in_sample_scenarios[:,:,0]
@@ -224,13 +224,14 @@ def solve_stochastic_strategy_two_price(in_sample_scenarios):
     # Optimize
     m.optimize()
     
-    # Print computational details
-    runtime_sec    = m.Runtime
-    num_vars       = int(m.NumVars)
-    num_constrs    = int(m.NumConstrs)
-    print(f"  Computational time:    {runtime_sec:.6f} s")
-    print(f"  Decision variables:    {num_vars}")
-    print(f"  Constraints:           {num_constrs}")
+    if silent == False:
+        # Print computational details
+        runtime_sec    = m.Runtime
+        num_vars       = int(m.NumVars)
+        num_constrs    = int(m.NumConstrs)
+        print(f"  Computational time:    {runtime_sec:.6f} s")
+        print(f"  Decision variables:    {num_vars}")
+        print(f"  Constraints:           {num_constrs}")
 
     # Compute profit per hour and scenario
     p_DA_vec = np.array([p_DA[t].X for t in range(n_hours)])
@@ -238,7 +239,7 @@ def solve_stochastic_strategy_two_price(in_sample_scenarios):
     Delta_down_mat = np.array([[Delta_down[t, s].X for s in range(n_scenarios)] for t in range(n_hours)])
     profit_matrix = (lambda_DA * p_DA_vec[:, None] + lambda_bal_up * Delta_up_mat - lambda_bal_down * Delta_down_mat)
 
-    return m, p_DA, Delta_up, Delta_down, profit_matrix
+    return m, p_DA_vec, Delta_up, Delta_down, profit_matrix
 
 def plot_DA_offers(p_DA, in_sample_scenarios, title="Day-ahead offers", Threshold_value=None):
     # Average forecasted wind production per hour (24-hour profile)
@@ -386,17 +387,57 @@ def create_folds(scenarios, n_in_sample, seed=42):
 
     return folds
 
-def calculate_profit(scenarios_in, scenarios_out, p_DA, two_price=False):
+def cross_validate_folds(folds, two_price=False):
+
+    in_sample_means = []
+    out_sample_means = []
+
+    for i in range(len(folds)):
+
+        # in-sample
+        fold = folds[i]
+
+        # out-of-sample
+        out_of_sample = np.concatenate(
+            [folds[j] for j in range(len(folds)) if j != i],
+            axis=1
+        )
+
+        # solve model
+        if two_price:
+            _, p_DA_vec, _, _, profit_matrix_fold = solve_stochastic_strategy_two_price(fold, silent=True)
+        else:
+            _, p_DA_vec, _, profit_matrix_fold = solve_stochastic_strategy_one_price(fold, silent=True)
+
+        # in-sample evaluation
+        in_sample_profit = profit_matrix_fold.sum(axis=0)
+
+        # out-of-sample evaluation
+        profit_out = calculate_profit(fold, out_of_sample, p_DA_vec, two_price=two_price)
+
+        # store
+        in_sample_means.append(in_sample_profit.mean())
+        out_sample_means.append(profit_out.mean())
+
+        print(f"Fold {i+1}: in={in_sample_profit.mean():.3f}, out={profit_out.mean():.3f}")
+
+    return in_sample_means, out_sample_means
+
+
+def calculate_profit(scenarios_in, scenarios_out, p_DA_vec, two_price=False):
 
     # scenarios shape: (n_hours, n_scenarios, 3)
     p_real_out = scenarios_out[:, :, 0]
     lambda_DA_out = scenarios_out[:, :, 1]
     deficit_bin_out = scenarios_out[:, :, 2]
 
-    # Reconstruct p_DA as vector
-    # (since it's a gurobi dict)
-    n_hours = scenarios_out.shape[0]
-    p_DA_vec = np.array([p_DA[t].X for t in range(n_hours)])
+    # use in-sample scenarios for DA profit
+    lambda_DA_in = scenarios_in[:, :, 1]
+
+    # mean DA price per hour across in-sample scenarios
+    lambda_mean = lambda_DA_in.mean(axis=1)   # shape: (24,)
+
+    DA_profit = p_DA_vec * lambda_mean # shape: (24,)
 
     if two_price:
         # Balancing price
@@ -408,14 +449,14 @@ def calculate_profit(scenarios_in, scenarios_out, p_DA, two_price=False):
         Delta_down = np.maximum(-Delta, 0)
 
         profit_matrix = (
-            lambda_DA_out * p_DA_vec[:, None]
+            DA_profit[:, None]
             + lambda_bal_up * Delta_up
             - lambda_bal_down * Delta_down
         )
 
-        profit_per_scenario = profit_matrix.sum(axis=0)
+        profit_out = profit_matrix.sum(axis=0)
 
-        return profit_per_scenario
+        return profit_out
 
     else:
         # Balancing price
@@ -425,9 +466,11 @@ def calculate_profit(scenarios_in, scenarios_out, p_DA, two_price=False):
         Delta = p_real_out - p_DA_vec[:, None]
 
         # Profit per hour & scenario
-        profit_matrix = lambda_DA_out * p_DA_vec[:, None] + lambda_bal * Delta
+        profit_matrix = DA_profit[:, None] + lambda_bal * Delta
 
         # Return total profit per scenario
-        profit_per_scenario = profit_matrix.sum(axis=0)
+        profit_out = profit_matrix.sum(axis=0)
 
-        return profit_per_scenario
+        return profit_out
+    
+

@@ -26,12 +26,11 @@ in_sample_scenarios = scenarios[:, idx, :]
 m, p_DA, Delta, profit_matrix = uf.solve_stochastic_strategy_one_price(in_sample_scenarios)
 
 # Print expected profit and day-ahead offers
-p_DA_values = np.array([v.X for v in p_DA.values()])
 print("Expected Profit (One-Price):", round(m.ObjVal, 3), "MDKK")
-print("Day-Ahead offers:", p_DA_values)
+print("Day-Ahead offers:", p_DA)
 
 # Plot day-ahead offers
-uf.plot_DA_offers(p_DA_values, in_sample_scenarios, title="Day-ahead offers - One-Price", Threshold_value=0.375)
+uf.plot_DA_offers(p_DA, in_sample_scenarios, title="Day-ahead offers - One-Price", Threshold_value=0.375)
 
 # Plot profit distribution per scenario
 profit_per_hour = profit_matrix.mean(axis=1)
@@ -49,12 +48,11 @@ uf.plot_cumulative_profit_distribution(profit_per_scenario, title="Cumulative pr
 m_2, p_DA_2, Delta_up, Delta_down, profit_matrix_2 = uf.solve_stochastic_strategy_two_price(in_sample_scenarios)
 
 # Print expected profit and day-ahead offers
-p_DA_2_values = np.array([v.X for v in p_DA_2.values()])
 print("Expected Profit (Two-Price):", round(m_2.ObjVal,3), "MDKK")
-print("Day-Ahead offers:", p_DA_2_values)
+print("Day-Ahead offers:", p_DA_2)
 
 # Plot day-ahead offers
-uf.plot_DA_offers(p_DA_2_values, in_sample_scenarios, title="Day-ahead offers - Two-Price")
+uf.plot_DA_offers(p_DA_2, in_sample_scenarios, title="Day-ahead offers - Two-Price")
 
 # Plot profit distribution per scenario
 profit_per_hour_2 = profit_matrix_2.mean(axis=1)
@@ -67,44 +65,58 @@ uf.plot_profit_distribution_comparison(profit_per_scenario, profit_per_scenario_
 
 
 
-#%% Divide into 20 folds for cross-validation
+#%% -----------------------
+# Task 1.3) Cross-Validation of Offering Strategies
+# -------------------------
 
 folds = uf.create_folds(scenarios, n_in_sample=200, seed=rng) # Creates a list of arrays, each of shape (24, 200, 3)
 
-in_sample_means = []
-out_sample_means = []
+# One-price cross-validation
+in_sample_means_one, out_sample_means_one = uf.cross_validate_folds(folds, two_price=False)
 
-for i in range(len(folds)):
+print(f"One-Price mean in-sample profit:  {np.mean(in_sample_means_one):.15f} MDKK")
+print(f"One-Price mean out-of-sample profit: {np.mean(out_sample_means_one):.15f} MDKK")
 
-    # in-sample
-    fold = folds[i]
+print(f"Std in-sample profit:   {np.std(in_sample_means_one):.3f}")
+print(f"Std out-of-sample profit:{np.std(out_sample_means_one):.3f}")
 
-    # Out-of-sample = all other folds
-    out_of_sample = np.concatenate(
-        [folds[j] for j in range(len(folds)) if j != i],
-        axis=1  # concatenate along scenario dimension
-    )
+# Two_Price cross-validation
+in_sample_means_two, out_sample_means_two = uf.cross_validate_folds(folds, two_price=True)
 
-    # solve
-    m_fold, p_DA_fold, _, profit_matrix_fold = uf.solve_stochastic_strategy_one_price(fold,silent=True)
+print(f"Two-Price mean in-sample profit:  {np.mean(in_sample_means_two):.15f} MDKK")
+print(f"Two-Price mean out-of-sample profit: {np.mean(out_sample_means_two):.15f} MDKK")
 
-    in_sample_profit = profit_matrix_fold.sum(axis=0)
+print(f"Std in-sample profit:   {np.std(in_sample_means_two):.3f}")
+print(f"Std out-of-sample profit:{np.std(out_sample_means_two):.3f}")
 
-    # evaluate
-    profit_out = uf.calculate_profit(out_of_sample, p_DA_fold, two_price=False)
 
-    # store results
-    in_sample_means.append(in_sample_profit.mean())
-    out_sample_means.append(profit_out.mean())
-    print(f"Fold {i+1}: in={in_sample_profit.mean():.3f}, out={profit_out.mean():.3f}")
 
-print("\n===== CROSS-VALIDATION SUMMARY =====")
 
-print(f"Mean in-sample profit:  {np.mean(in_sample_means):.15f} MDKK")
-print(f"Mean out-of-sample profit: {np.mean(out_sample_means):.15f} MDKK")
 
-print(f"Std in-sample profit:   {np.std(in_sample_means):.3f}")
-print(f"Std out-of-sample profit:{np.std(out_sample_means):.3f}")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 #%% ----------------------------------------
 # EXTRA DATA PRINT AND EXTRA PLOTS
@@ -116,8 +128,8 @@ df_prob = pd.DataFrame({
     "hour": np.arange(24),
     "P(deficit)": prob_deficit,
     "P(surplus)": 1 - prob_deficit,
-    "DA offers one price": p_DA_values,
-    "DA offers two price": p_DA_2_values
+    "DA offers one price": p_DA,
+    "DA offers two price": p_DA_2
 })
 
 print(df_prob)
