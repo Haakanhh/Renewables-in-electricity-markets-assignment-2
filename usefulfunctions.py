@@ -241,6 +241,32 @@ def solve_stochastic_strategy_two_price(in_sample_scenarios, silent=False):
 
     return m, p_DA_vec, Delta_up, Delta_down, profit_matrix
 
+def plot_DA_offers(p_DA, in_sample_scenarios, title="Day-ahead offers"):
+    # Average forecasted wind production per hour (24-hour profile)
+    avg_forecasted_wind_per_hour = in_sample_scenarios[:, :, 0].mean(axis=1)
+    df_avg_forecasted_wind = pd.DataFrame({
+        "hour": np.arange(24),
+        "avg_forecasted_wind_mwh": avg_forecasted_wind_per_hour
+    })
+
+    hours = np.arange(24)
+
+    plt.figure(figsize=(12, 6))
+    plt.step(hours, p_DA, where="post", marker="o", linewidth=2, label="Offering capacity")
+    plt.step(hours, avg_forecasted_wind_per_hour, where="post", marker="s", linewidth=2, label="Avg. forecasted wind production")
+
+    plt.title(title, fontsize=16)
+    plt.xlabel("Hour", fontsize=12)
+    plt.ylabel("Power (MW)", fontsize=12)
+    plt.xticks(np.arange(24))
+    plt.xlim(0, 23)
+    plt.ylim(0, 550)
+    plt.grid(True, alpha=0.3)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+
 
 def plot_profit_distribution(profit_per_scenario, n_bins = 15, title="Profit distribution per scenario"):
     plt.figure(figsize=(10,6))

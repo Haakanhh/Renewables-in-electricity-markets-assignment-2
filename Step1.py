@@ -26,6 +26,9 @@ m, p_DA, Delta, profit_matrix = uf.solve_stochastic_strategy_one_price(in_sample
 print("Expected Profit (One-Price):", round(m.ObjVal, 3), "MDKK")
 print("Day-Ahead offers:", p_DA)
 
+# Plot day-ahead offers
+uf.plot_DA_offers(p_DA_values, in_sample_scenarios, title="Day-ahead offers - One-Price")
+
 # Plot profit distribution per scenario
 profit_per_hour = profit_matrix.mean(axis=1)
 profit_per_scenario = profit_matrix.sum(axis=0)
@@ -43,6 +46,9 @@ m_2, p_DA_2, Delta_up, Delta_down, profit_matrix_2 = uf.solve_stochastic_strateg
 # Print expected profit and day-ahead offers
 print("Expected Profit (Two-Price):", round(m_2.ObjVal,3), "MDKK")
 print("Day-Ahead offers:", p_DA_2)
+
+# Plot day-ahead offers
+uf.plot_DA_offers(p_DA_2_values, in_sample_scenarios, title="Day-ahead offers - Two-Price")
 
 # Plot profit distribution per scenario
 profit_per_hour_2 = profit_matrix_2.mean(axis=1)
