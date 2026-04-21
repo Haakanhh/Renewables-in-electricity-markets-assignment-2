@@ -405,3 +405,159 @@ def calculate_profit(scenarios_in, scenarios_out, p_DA_vec, two_price=False):
         return profit_out
     
 
+def solve_risk_averse_one_price(in_sample_scenarios, alpha=0.9, beta=0, silent=False):
+    
+    # in_sample_scenarios has shape (n_hours, n_scenarios, 3)
+    p_real = in_sample_scenarios[:,:,0]
+    lambda_DA = in_sample_scenarios[:,:,1]
+    deficit_bin = in_sample_scenarios[:,:,2]
+
+    m = gp.Model("stochastic_one_price")
+    m.Params.OutputFlag = 0
+
+    # Parameters
+    P_nom = 500
+    n_hours = len(in_sample_scenarios[:, 0, 0])
+    n_scenarios = len(in_sample_scenarios[0, :, 0])
+    prob_scenarios = 1 / n_scenarios
+    lambda_bal = 1.25 * lambda_DA * deficit_bin + 0.85 * lambda_DA * (1 - deficit_bin) 
+    alpha = alpha # used quantile
+    beta = beta # balance between risk-neutral and risk-averse
+
+    # Variables
+    p_DA = m.addVars(n_hours, lb=0, name="DayAhead offer")
+    Delta = m.addVars(n_hours, n_scenarios, lb=-gp.GRB.INFINITY, ub=gp.GRB.INFINITY, name="Difference_DA_real")
+    zeta = m.addVar(lb=0, name = "VaR")
+    eta = m.addVars(n_scenarios, lb=0, name = "auxillary_helper_variable")
+
+    # Objective
+    m.setObjective((1-beta) * gp.quicksum(prob_scenarios * 
+                                (lambda_DA[t, s] * p_DA[t]
+                                 + lambda_bal[t, s] * Delta[t, s])
+                                for t in range(n_hours) for s in range(n_scenarios))
+                    + beta * (zeta - 1/(1-alpha) * gp.quicksum(prob_scenarios * eta[s] for s in range(n_scenarios))), gp.GRB.MAXIMIZE)
+
+
+    # Capacity limit constraint
+    for t in range(n_hours):
+        m.addConstr(p_DA[t] <= P_nom, name=f"Capacity_limit_{t}")
+
+    # Constraints setting difference between DA and real production
+    for t in range(n_hours):
+        for s in range(n_scenarios):
+            m.addConstr(Delta[t, s] == p_real[t, s] - p_DA[t], name=f"Difference_DA_real_{t}_{s}")
+
+    # eta constraints
+    for s in range(n_scenarios):
+        m.addConstr(-gp.quicksum(lambda_DA[t, s] * p_DA[t] + lambda_bal[t, s] * Delta[t, s] for t in range(n_hours)) + zeta - eta[s] <= 0)
+
+    # Optimize
+    m.optimize()
+
+    if silent == False:
+        # Print computational details
+        runtime_sec    = m.Runtime
+        num_vars       = int(m.NumVars)
+        num_constrs    = int(m.NumConstrs)
+        print(f"  Computational time:    {runtime_sec:.6f} s")
+        print(f"  Decision variables:    {num_vars}")
+        print(f"  Constraints:           {num_constrs}")
+
+    # Compute profit per hour and scenario
+    p_DA_vec = np.array([p_DA[t].X for t in range(n_hours)])
+    Delta_mat = np.array([[Delta[t, s].X for s in range(n_scenarios)] for t in range(n_hours)])
+    profit_matrix = lambda_DA * p_DA_vec[:, None] + lambda_bal * Delta_mat
+
+    zeta_val = zeta.X
+    eta_vec = np.array([eta[s].X for s in range(n_scenarios)])
+    cvar = zeta_val - (1/(1-alpha)) * prob_scenarios * eta_vec.sum()
+
+    return m, p_DA_vec, Delta, profit_matrix, cvar
+
+
+def solve_risk_averse_two_price(in_sample_scenarios, alpha=0.9, beta=0, silent=False):
+
+    # in_sample_scenarios has shape (n_hours, n_scenarios, 3)
+    p_real = in_sample_scenarios[:,:,0]
+    lambda_DA = in_sample_scenarios[:,:,1]
+    deficit_bin = in_sample_scenarios[:,:,2]
+
+    m = gp.Model("risk_averse_two_price")
+    m.Params.OutputFlag = 0
+
+    # Parameters
+    P_nom = 500
+    n_hours = len(in_sample_scenarios[:, 0, 0])
+    n_scenarios = len(in_sample_scenarios[0, :, 0])
+    prob_scenarios = 1 / n_scenarios
+    lambda_bal_up   = deficit_bin * lambda_DA + (1 - deficit_bin) * 0.85 * lambda_DA
+    lambda_bal_down = deficit_bin * 1.25 * lambda_DA + (1 - deficit_bin) * lambda_DA
+
+    # Variables
+    p_DA = m.addVars(n_hours, lb=0, name="DayAhead offer")
+    Delta = m.addVars(n_hours, n_scenarios, lb=-gp.GRB.INFINITY, ub=gp.GRB.INFINITY, name="Difference_DA_real")
+    Delta_up = m.addVars(n_hours, n_scenarios, lb=0, name="difference over 0")
+    Delta_down = m.addVars(n_hours, n_scenarios, lb=0, name="difference under 0")
+    zeta = m.addVar(lb=0, name="VaR")
+    eta = m.addVars(n_scenarios, lb=0, name="auxiliary_helper_variable")
+
+    # Objective
+    m.setObjective(
+        (1 - beta) * gp.quicksum(
+            prob_scenarios * (
+                lambda_DA[t, s] * p_DA[t]
+                + lambda_bal_up[t, s]   * Delta_up[t, s]
+                - lambda_bal_down[t, s] * Delta_down[t, s])
+            for t in range(n_hours) for s in range(n_scenarios))
+        + beta * (zeta - 1/(1-alpha) * gp.quicksum(prob_scenarios * eta[s] for s in range(n_scenarios))),
+        gp.GRB.MAXIMIZE)
+
+    # Capacity limit constraint
+    for t in range(n_hours):
+        m.addConstr(p_DA[t] <= P_nom, name=f"Capacity_limit_{t}")
+
+    # Delta split constraints
+    for t in range(n_hours):
+        for s in range(n_scenarios):
+            m.addConstr(Delta[t, s] == p_real[t, s] - p_DA[t], name=f"Difference_DA_real_{t}_{s}")
+            m.addConstr(Delta[t, s] == Delta_up[t, s] - Delta_down[t, s], name=f"Difference_split_{t}_{s}")
+
+    # Big-M binary constraints for Delta_up/down split
+    b = m.addVars(n_hours, n_scenarios, vtype=gp.GRB.BINARY, name="split_bin")
+    M = P_nom
+
+    for t in range(n_hours):
+        for s in range(n_scenarios):
+            m.addConstr(Delta_up[t, s]   <= M * b[t, s])
+            m.addConstr(Delta_down[t, s] <= M * (1 - b[t, s]))
+
+    # CVaR eta constraints: eta[s] >= zeta - profit[s]
+    for s in range(n_scenarios):
+        m.addConstr(
+            -gp.quicksum(
+                lambda_DA[t, s] * p_DA[t]
+                + lambda_bal_up[t, s]   * Delta_up[t, s]
+                - lambda_bal_down[t, s] * Delta_down[t, s]
+                for t in range(n_hours))
+            + zeta - eta[s] <= 0,
+            name=f"CVaR_eta_{s}")
+
+    # Optimize
+    m.optimize()
+
+    if not silent:
+        print(f"  Computational time:    {m.Runtime:.6f} s")
+        print(f"  Decision variables:    {int(m.NumVars)}")
+        print(f"  Constraints:           {int(m.NumConstrs)}")
+
+    # Extract solution
+    p_DA_vec = np.array([p_DA[t].X for t in range(n_hours)])
+    Delta_up_mat   = np.array([[Delta_up[t, s].X   for s in range(n_scenarios)] for t in range(n_hours)])
+    Delta_down_mat = np.array([[Delta_down[t, s].X for s in range(n_scenarios)] for t in range(n_hours)])
+    profit_matrix  = lambda_DA * p_DA_vec[:, None] + lambda_bal_up * Delta_up_mat - lambda_bal_down * Delta_down_mat
+
+    zeta_val = zeta.X
+    eta_vec  = np.array([eta[s].X for s in range(n_scenarios)])
+    cvar = zeta_val - (1/(1-alpha)) * prob_scenarios * eta_vec.sum()
+
+    return m, p_DA_vec, profit_matrix, cvar
