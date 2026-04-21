@@ -1,10 +1,13 @@
 #%%
+import importlib
 import numpy as np
 import pandas as pd
 import usefulfunctions as uf
 import matplotlib.pyplot as plt
 
-seed = 42
+importlib.reload(uf)
+
+seed = 40
 rng = np.random.default_rng(seed)
 
 # Generate scenarios
@@ -27,12 +30,13 @@ print("Expected Profit (One-Price):", round(m.ObjVal, 3), "MDKK")
 print("Day-Ahead offers:", p_DA)
 
 # Plot day-ahead offers
-uf.plot_DA_offers(p_DA, in_sample_scenarios, title="Day-ahead offers - One-Price")
+uf.plot_DA_offers(p_DA, in_sample_scenarios, title="Day-ahead offers - One-Price", Threshold_value=0.375)
 
 # Plot profit distribution per scenario
 profit_per_hour = profit_matrix.mean(axis=1)
 profit_per_scenario = profit_matrix.sum(axis=0)
 uf.plot_profit_distribution(profit_per_scenario, n_bins = 30, title="Profit distribution per scenario in one-price system")
+uf.plot_cumulative_profit_distribution(profit_per_scenario, title="Cumulative profit distribution - One-price")
 
 
 #%% ----------------------
@@ -54,6 +58,7 @@ uf.plot_DA_offers(p_DA_2, in_sample_scenarios, title="Day-ahead offers - Two-Pri
 profit_per_hour_2 = profit_matrix_2.mean(axis=1)
 profit_per_scenario_2 = profit_matrix_2.sum(axis=0)
 uf.plot_profit_distribution(profit_per_scenario_2, n_bins = 30, title="Profit distribution per scenario in two-price system")
+uf.plot_cumulative_profit_distribution(profit_per_scenario_2, title="Cumulative profit distribution - Two-price")
 
 # Profit comparison plot
 uf.plot_profit_distribution_comparison(profit_per_scenario, profit_per_scenario_2, n_bins=30)
