@@ -80,6 +80,8 @@ print(f"One-Price mean out-of-sample profit: {np.mean(out_sample_means_one):.15f
 print(f"Std in-sample profit:   {np.std(in_sample_means_one):.3f}")
 print(f"Std out-of-sample profit:{np.std(out_sample_means_one):.3f}")
 
+uf.plot_Cross_Validation_Profits(in_sample_means_one, out_sample_means_one, title="Cross-Validation mean profits - One-Price")
+
 # Two_Price cross-validation
 in_sample_means_two, out_sample_means_two = uf.cross_validate_folds(folds, two_price=True)
 
@@ -89,7 +91,7 @@ print(f"Two-Price mean out-of-sample profit: {np.mean(out_sample_means_two):.15f
 print(f"Std in-sample profit:   {np.std(in_sample_means_two):.3f}")
 print(f"Std out-of-sample profit:{np.std(out_sample_means_two):.3f}")
 
-
+uf.plot_Cross_Validation_Profits(in_sample_means_two, out_sample_means_two, title="Cross-Validation mean profits - Two-Price")
 
 
 

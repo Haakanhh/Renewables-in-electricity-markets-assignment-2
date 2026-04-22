@@ -474,3 +474,23 @@ def calculate_profit(scenarios_in, scenarios_out, p_DA_vec, two_price=False):
         return profit_out
     
 
+def plot_Cross_Validation_Profits(in_sample_means, out_sample_means, title="Expected profits for each fold"):
+    folds = np.arange(1, len(in_sample_means) + 1)
+    x = np.arange(len(folds))
+    bar_width = 0.4
+    in_mean = np.mean(in_sample_means)
+    out_mean = np.mean(out_sample_means)
+
+    plt.figure(figsize=(10, 6))
+    plt.bar(x - bar_width / 2, in_sample_means, width=bar_width, label="In-sample mean profit")
+    plt.bar(x + bar_width / 2, out_sample_means, width=bar_width, label="Out-of-sample mean profit")
+    plt.axhline(in_mean, linestyle="--", linewidth=1.5, color="tab:blue", label=f"Avg in-sample: {in_mean:.3f}")
+    plt.axhline(out_mean, linestyle="--", linewidth=1.5, color="tab:orange", label=f"Avg out-of-sample: {out_mean:.3f}")
+    plt.title(title, fontsize=18)
+    plt.xlabel("Fold", fontsize=14)
+    plt.ylabel("Mean profit (MDKK)", fontsize=14)
+    plt.xticks(x, folds)
+    plt.ylim(bottom=0)
+    plt.grid(True, alpha=0.3)
+    plt.legend(fontsize=14)
+    plt.show()
