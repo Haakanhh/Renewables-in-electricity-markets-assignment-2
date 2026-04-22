@@ -703,7 +703,7 @@ def Load_profile_generation(random_state=None, Profiles=300, P_max=600, P_min=22
 
 def Optimal_reserve_bid_ALSO_X (in_sample_profiles, q, P_min=0, M=None, silent=False):
 
-
+    #!This functions needs to be checked!
 
     m = gp.Model("Optimal_reserve_bid_ALSO-X")
     m.Params.OutputFlag = 0
