@@ -651,3 +651,102 @@ def solve_risk_averse_two_price(in_sample_scenarios, alpha=0.9, beta=0, silent=F
     cvar = zeta_val - (1/(1-alpha)) * prob_scenarios * eta_vec.sum()
 
     return m, p_DA_vec, profit_matrix, cvar
+
+
+def Load_profile_generation(random_state=None, Profiles=300, P_max=600, P_min=220, P_delta=35):
+    """
+    Generate random load profiles for a single hour at minute-level resolution.
+    
+    Parameters:
+    -----------
+    random_state : int or np.random.Generator, optional
+        Seed for the random number generator
+    Profiles : int
+        Number of load profiles to generate, default 300
+    P_max : float
+        Maximum power consumption (kW), default 600
+    P_min : float
+        Minimum power consumption (kW), default 220
+    P_delta : float
+        Maximum minute-to-minute change (kW), default 35
+    
+    Returns:
+    --------
+    np.ndarray
+        Array of shape (Profiles, 60) containing load profiles in kW.
+        Each row is one profile with 60 values (one per minute in an hour).
+    """
+
+    rng = np.random.default_rng(random_state)
+    n_minutes = 60
+    
+    # Initialize array to store profiles
+    profiles = np.zeros((Profiles, n_minutes))
+    
+    for i in range(Profiles):
+        # Start with a random value within the allowed range
+        current_power = rng.uniform(P_min, P_max)
+        profiles[i, 0] = current_power
+        
+        # Generate remaining minutes
+        for minute in range(1, n_minutes):
+            # Generate random change limited by P_delta
+            delta = rng.uniform(-P_delta, P_delta)
+            
+            # Apply change and clip to stay within bounds
+            next_power = np.clip(current_power + delta, P_min, P_max)
+            profiles[i, minute] = next_power
+            current_power = next_power
+    
+    return profiles
+
+
+def Optimal_reserve_bid_ALSO_X (in_sample_profiles, q, P_min=0, M=None, silent=False):
+
+
+
+    m = gp.Model("Optimal_reserve_bid_ALSO-X")
+    m.Params.OutputFlag = 0
+
+    # Parameters
+    n_profiles = in_sample_profiles.shape[0]
+    n_minutes = in_sample_profiles.shape[1]
+    
+    # F_up[m, w] = available upward reserve from load reduction
+    F_up = (in_sample_profiles - P_min).T
+    F_up = np.maximum(F_up, 0.0)
+
+    model = gp.Model("Optimal_reserve_bid_ALSO_X")
+    if silent:
+        model.Params.OutputFlag = 0
+
+    # Big-M: enough to relax c_up <= F_up when y=1
+    if M is None:
+        M = float(np.max(F_up)) if F_up.size > 0 else 0.0
+
+
+   # Variables
+    c_up = model.addVar(lb=0.0, name="c_up")
+    y = model.addVars(n_minutes, n_profiles, vtype=gp.GRB.BINARY, name="y")
+
+    # Objective
+    model.setObjective(c_up, gp.GRB.MAXIMIZE)
+
+
+
+    # ALSO-X constraints
+    for m in range(n_minutes):
+        for w in range(n_profiles):
+            model.addConstr(c_up - F_up[m, w] <= M * y[m, w], name=f"alsox_{m}_{w}")
+
+    model.addConstr(
+        gp.quicksum(y[m, w] for m in range(n_minutes) for w in range(n_profiles)) <= q,
+        name="violation_budget"
+    )
+
+    model.optimize()
+
+    c_up_value = c_up.X if model.Status == gp.GRB.OPTIMAL else np.nan
+    y_value = np.array([[y[m, w].X for w in range(n_profiles)] for m in range(n_minutes)])
+
+    return model, c_up_value, y_value, F_up
