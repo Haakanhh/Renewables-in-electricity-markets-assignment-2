@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 
 importlib.reload(uf)
 
-seed = 40
+seed = 42
 rng = np.random.default_rng(seed)
 
 # Generate scenarios
@@ -17,7 +17,7 @@ scenarios = uf.generate_scenarios(random_state=rng, n_wind=20, n_price=20, n_sur
 # Task 1.1) Offering Strategy Under a One-Price Balancing Scheme
 # ------------------------
 
-# Pick 100 random scenarios
+# Pick random scenarios
 n_insample_scenarios = 200
 idx = rng.choice(scenarios.shape[1], size=n_insample_scenarios, replace=False)
 in_sample_scenarios = scenarios[:, idx, :]
@@ -36,6 +36,7 @@ uf.plot_DA_offers(p_DA, in_sample_scenarios, title="Day-ahead offers - One-Price
 profit_per_hour = profit_matrix.mean(axis=1)
 profit_per_scenario = profit_matrix.sum(axis=0)
 uf.plot_profit_distribution(profit_per_scenario, n_bins = 30, title="Profit distribution per scenario in one-price system")
+
 uf.plot_cumulative_profit_distribution(profit_per_scenario, title="Cumulative profit distribution - One-price")
 
 
@@ -99,7 +100,7 @@ uf.plot_Cross_Validation_Profits(in_sample_means_two, out_sample_means_two, titl
 # Task 1.4) Risk-Averse Offering Strategy
 # ---------------------
 
-beta_range = np.linspace(1e-6, 1, 20)
+beta_range = np.linspace(1e-3, 1, 20)
 
 exp_profit = []
 cvar_list = []
@@ -183,6 +184,14 @@ plt.show()
 #%% ----------------------------------------
 # EXTRA DATA PRINT AND EXTRA PLOTS
 # ------------------------------------------
+
+#%% Spotprice distribution
+
+price_tdkk = in_sample_scenarios[:,:,1]*1e3
+uf.plot_profit_distribution(price_tdkk.flatten(), n_bins = 30, title="Spotprice distribution per scenario and hour", x_label="Spotprice (tDKK/MWh)")
+
+#%%
+
 
 # Calculate deficit probability across scenarios per hour
 prob_deficit = in_sample_scenarios[:, :, 2].mean(axis=1)

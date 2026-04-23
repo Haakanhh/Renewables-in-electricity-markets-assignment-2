@@ -190,7 +190,7 @@ def solve_stochastic_strategy_two_price(in_sample_scenarios, silent=False):
 
     # Variables
     p_DA = m.addVars(n_hours, lb=0, name="DayAhead offer")
-    Delta = m.addVars(n_hours, n_scenarios, lb=-gp.GRB.INFINITY, ub=gp.GRB.INFINITY, name="Difference_DA_real")
+    #Delta = m.addVars(n_hours, n_scenarios, lb=-gp.GRB.INFINITY, ub=gp.GRB.INFINITY, name="Difference_DA_real")
     Delta_up = m.addVars(n_hours, n_scenarios, lb=0, name="difference over 0")
     Delta_down = m.addVars(n_hours, n_scenarios, lb=0, name="difference under 0")
 
@@ -210,16 +210,17 @@ def solve_stochastic_strategy_two_price(in_sample_scenarios, silent=False):
     for t in range(n_hours):
         for s in range(n_scenarios):
             #m.addConstr(Delta_up[t, s] - Delta_down[t, s] == p_real[t, s] - p_DA[t])
-            m.addConstr(Delta[t, s] == p_real[t, s] - p_DA[t], name=f"Difference_DA_real_{t}_{s}")
-            m.addConstr(Delta[t, s] == Delta_up[t, s] - Delta_down[t, s], name=f"Difference_split_{t}_{s}")
+            m.addConstr(Delta_up[t, s] - Delta_down[t, s] == p_real[t, s] - p_DA[t], name=f"Difference_DA_real_{t}_{s}")
+            #m.addConstr(Delta[t, s] == Delta_up[t, s] - Delta_down[t, s], name=f"Difference_split_{t}_{s}")
 
-    b = m.addVars(n_hours, n_scenarios, vtype=gp.GRB.BINARY, name="split_bin")
-    M = P_nom  # natural upper bound, since imbalance can't exceed wind capacity
+    
+    #b = m.addVars(n_hours, n_scenarios, vtype=gp.GRB.BINARY, name="split_bin")
+    #M = P_nom  # natural upper bound, since imbalance can't exceed wind capacity
 
-    for t in range(n_hours):
-        for s in range(n_scenarios):
-            m.addConstr(Delta_up[t, s]   <= M * b[t, s])
-            m.addConstr(Delta_down[t, s] <= M * (1 - b[t, s]))
+    #for t in range(n_hours):
+    #    for s in range(n_scenarios):
+    #        m.addConstr(Delta_up[t, s]   <= M * b[t, s])
+    #        m.addConstr(Delta_down[t, s] <= M * (1 - b[t, s]))
 
     # Optimize
     m.optimize()
@@ -308,12 +309,12 @@ def plot_DA_offers(p_DA, in_sample_scenarios, title="Day-ahead offers", Threshol
 
 
 
-def plot_profit_distribution(profit_per_scenario, n_bins = 15, title="Profit distribution per scenario"):
+def plot_profit_distribution(profit_per_scenario, n_bins = 15, title="Profit distribution per scenario", x_label="Total profit (MDKK)"):
     plt.figure(figsize=(10,6))
     plt.hist(profit_per_scenario, bins=n_bins)
     plt.axvline(profit_per_scenario.mean(), color='red', linestyle='dashed', label=f"Mean: {profit_per_scenario.mean():.2f} MDKK")
     plt.title(title, fontsize=22)
-    plt.xlabel("Total profit (MDKK)", fontsize=16)
+    plt.xlabel(x_label, fontsize=16)
     plt.ylabel("Frequency", fontsize=16)
     plt.xticks(fontsize=14)
     plt.yticks(fontsize=14)
@@ -339,7 +340,7 @@ def plot_cumulative_profit_distribution(profit_per_scenario, title="Cumulative p
     )
 
     plt.title(title, fontsize=18)
-    plt.xlabel("Total profit (MDKK)", fontsize=14)
+    plt.xlabel("Total profit per scenario (MDKK)", fontsize=14)
     plt.ylabel("Cumulative probability", fontsize=14)
     plt.xticks(fontsize=14)
     plt.yticks(fontsize=14)
@@ -585,7 +586,6 @@ def solve_risk_averse_two_price(in_sample_scenarios, alpha=0.9, beta=0, silent=F
 
     # Variables
     p_DA = m.addVars(n_hours, lb=0, name="DayAhead offer")
-    Delta = m.addVars(n_hours, n_scenarios, lb=-gp.GRB.INFINITY, ub=gp.GRB.INFINITY, name="Difference_DA_real")
     Delta_up = m.addVars(n_hours, n_scenarios, lb=0, name="difference over 0")
     Delta_down = m.addVars(n_hours, n_scenarios, lb=0, name="difference under 0")
     zeta = m.addVar(lb=0, name="VaR")
@@ -609,17 +609,7 @@ def solve_risk_averse_two_price(in_sample_scenarios, alpha=0.9, beta=0, silent=F
     # Delta split constraints
     for t in range(n_hours):
         for s in range(n_scenarios):
-            m.addConstr(Delta[t, s] == p_real[t, s] - p_DA[t], name=f"Difference_DA_real_{t}_{s}")
-            m.addConstr(Delta[t, s] == Delta_up[t, s] - Delta_down[t, s], name=f"Difference_split_{t}_{s}")
-
-    # Big-M binary constraints for Delta_up/down split
-    b = m.addVars(n_hours, n_scenarios, vtype=gp.GRB.BINARY, name="split_bin")
-    M = P_nom
-
-    for t in range(n_hours):
-        for s in range(n_scenarios):
-            m.addConstr(Delta_up[t, s]   <= M * b[t, s])
-            m.addConstr(Delta_down[t, s] <= M * (1 - b[t, s]))
+            m.addConstr(Delta_up[t, s] - Delta_down[t, s] == p_real[t, s] - p_DA[t], name=f"Difference_DA_real_{t}_{s}")
 
     # CVaR eta constraints: eta[s] >= zeta - profit[s]
     for s in range(n_scenarios):
