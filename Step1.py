@@ -294,3 +294,36 @@ plt.show()
 
 
 # %%
+
+# compute deficit probabilities from folds
+deficit_probs_all = np.array([
+    fold[:, :, 2].mean(axis=1) for fold in folds
+])
+
+hours = np.arange(0, 24)
+
+labelsize = 16
+ticksize = 12
+titlesize= 20
+legendsize = 16
+
+mean_probs = deficit_probs_all.mean(axis=0)
+
+plt.figure(figsize=(12, 4))
+
+for i in range(deficit_probs_all.shape[0]):
+    plt.step(hours, deficit_probs_all[i], where='pre', alpha=0.7)
+
+plt.axhline(0.375, linestyle='--', label="Threshold (0.375)")
+
+plt.xlabel("Hour", fontsize=labelsize)
+plt.ylabel("Deficit Probability", fontsize=labelsize)
+plt.xlim(0,23)
+plt.xticks(hours, fontsize=ticksize)
+plt.yticks(fontsize=ticksize)
+plt.title("Deficit Probability per Fold", fontsize=titlesize)
+plt.legend(fontsize=legendsize)
+plt.grid(True, alpha=0.3)
+
+plt.show()
+# %%

@@ -420,14 +420,16 @@ def cross_validate_folds(folds, two_price=False):
 
         # out-of-sample evaluation
         profit_out = calculate_profit(fold, out_of_sample, p_DA_vec, two_price=two_price)
-
+        
         # store
         in_sample_means.append(in_sample_profit.mean())
         out_sample_means.append(profit_out.mean())
 
         print(f"Fold {i+1}: in={in_sample_profit.mean():.3f}, out={profit_out.mean():.3f}")
+        print("DA offers: ", p_DA_vec)
+        print("deficit probabilities: ", fold[:, :, 2].mean(axis=1))
 
-    return in_sample_means, out_sample_means
+    return in_sample_means, out_sample_means, 
 
 
 def calculate_profit(scenarios_in, scenarios_out, p_DA_vec, two_price=False):
@@ -696,9 +698,8 @@ def Load_profile_generation(random_state=None, Profiles=300, P_max=600, P_min=22
     return profiles
 
 
-def Optimal_reserve_bid_ALSO_X (in_sample_profiles, q, P_min=0, M=None, silent=False):
+def Optimal_reserve_bid_ALSO_X (in_sample_profiles, q, M=None, silent=False):
 
-    #!This functions needs to be checked!
 
     m = gp.Model("Optimal_reserve_bid_ALSO-X")
     m.Params.OutputFlag = 0
@@ -706,27 +707,23 @@ def Optimal_reserve_bid_ALSO_X (in_sample_profiles, q, P_min=0, M=None, silent=F
     # Parameters
     n_profiles = in_sample_profiles.shape[0]
     n_minutes = in_sample_profiles.shape[1]
+    F_up = (in_sample_profiles).T # F_up[m, w] = available upward reserve from load reduction
     
-    # F_up[m, w] = available upward reserve from load reduction
-    F_up = (in_sample_profiles - P_min).T
-    F_up = np.maximum(F_up, 0.0)
+    # Big-M: enough to relax c_up <= F_up when y=1
+    if M is None:
+        M = float(np.max(F_up)) if F_up.size > 0 else 0.0
 
     model = gp.Model("Optimal_reserve_bid_ALSO_X")
     if silent:
         model.Params.OutputFlag = 0
 
-    # Big-M: enough to relax c_up <= F_up when y=1
-    if M is None:
-        M = float(np.max(F_up)) if F_up.size > 0 else 0.0
-
-
    # Variables
     c_up = model.addVar(lb=0.0, name="c_up")
     y = model.addVars(n_minutes, n_profiles, vtype=gp.GRB.BINARY, name="y")
 
+
     # Objective
     model.setObjective(c_up, gp.GRB.MAXIMIZE)
-
 
 
     # ALSO-X constraints
@@ -745,3 +742,84 @@ def Optimal_reserve_bid_ALSO_X (in_sample_profiles, q, P_min=0, M=None, silent=F
     y_value = np.array([[y[m, w].X for w in range(n_profiles)] for m in range(n_minutes)])
 
     return model, c_up_value, y_value, F_up
+
+
+def Optimal_reserve_bid_CVaR (in_sample_profiles, epsilon, silent=False):
+
+    model = gp.Model("Optimal_reserve_bid_CVaR")
+    if silent:
+        model.Params.OutputFlag = 0
+
+    # Parameters
+    n_profiles = in_sample_profiles.shape[0]
+    n_minutes = in_sample_profiles.shape[1]
+    F_up = (in_sample_profiles).T # F_up[m, w]
+
+    # Decision variables
+    c_up = model.addVar(lb=0.0, name="c_up")
+    beta = model.addVar(ub=0.0, lb=-gp.GRB.INFINITY, name="beta")
+    zeta = model.addVars(
+        n_minutes, n_profiles,
+        lb=-gp.GRB.INFINITY,
+        ub=gp.GRB.INFINITY,
+        name="zeta"
+    )
+
+    # Objective: maximize reserve bid
+    model.setObjective(c_up, gp.GRB.MAXIMIZE)
+
+    # CVaR constraints
+    # c_up - F_up[m,w] <= zeta[m,w]
+    for m in range(n_minutes):
+        for w in range(n_profiles):
+            model.addConstr(c_up - F_up[m, w] <= zeta[m, w], name=f"cvar_link_{m}_{w}")
+
+    # (1/|M||W|) * sum zeta <= (1-epsilon) * beta
+    scale = 1.0 / (n_minutes * n_profiles)
+    model.addConstr(
+        scale * gp.quicksum(zeta[m, w] for m in range(n_minutes) for w in range(n_profiles))
+        <= (1.0 - epsilon) * beta,
+        name="cvar_avg"
+    )
+
+    # beta <= zeta[m,w]
+    for m in range(n_minutes):
+        for w in range(n_profiles):
+            model.addConstr(beta <= zeta[m, w], name=f"beta_lb_{m}_{w}")
+
+    model.optimize()
+
+    c_up_value = c_up.X if model.Status == gp.GRB.OPTIMAL else np.nan
+    beta_value = beta.X if model.Status == gp.GRB.OPTIMAL else np.nan
+    zeta_value = np.array([[zeta[m, w].X for w in range(n_profiles)] for m in range(n_minutes)])
+
+    return model, c_up_value, beta_value, zeta_value, F_up
+
+
+def histogram_of_violations(c_up, F_up, title="Histogram of violations"):
+    F_up = np.asarray(F_up, dtype=float)
+    
+    # Count violations per profile: for each profile w, count minutes m where F_up[m, w] < c_up
+    violations_per_profile = (F_up < c_up).sum(axis=0)
+    
+    # Calculate mean
+    mean_violations = violations_per_profile.mean()
+
+    # Create histogram using unique counts and their frequencies
+    unique_counts, counts = np.unique(violations_per_profile, return_counts=True)
+    
+    plt.figure(figsize=(10, 6))
+    plt.bar(unique_counts, counts, width=0.8, edgecolor='black', alpha=0.7)
+    plt.axvline(6, color='darkgreen', linestyle='--', linewidth=2, 
+                label=f'P90 target (6 violations)')
+    plt.axvline(mean_violations, color='darkred', linestyle=':', linewidth=2, 
+                label=f'Mean: {mean_violations:.2f}')
+    plt.xlabel("Number of violations per profile", fontsize=14)
+    plt.ylabel("Number of profiles", fontsize=14)
+    plt.title(title, fontsize=16)
+    plt.xticks(unique_counts)
+    plt.grid(True, alpha=0.3, axis='y')
+    plt.legend(fontsize=13)
+    plt.tight_layout()
+    plt.show()
+    
