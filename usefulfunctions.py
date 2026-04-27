@@ -415,14 +415,16 @@ def cross_validate_folds(folds, two_price=False):
 
         # out-of-sample evaluation
         profit_out = calculate_profit(fold, out_of_sample, p_DA_vec, two_price=two_price)
-
+        
         # store
         in_sample_means.append(in_sample_profit.mean())
         out_sample_means.append(profit_out.mean())
 
         print(f"Fold {i+1}: in={in_sample_profit.mean():.3f}, out={profit_out.mean():.3f}")
+        print("DA offers: ", p_DA_vec)
+        print("deficit probabilities: ", fold[:, :, 2].mean(axis=1))
 
-    return in_sample_means, out_sample_means
+    return in_sample_means, out_sample_means, 
 
 
 def calculate_profit(scenarios_in, scenarios_out, p_DA_vec, two_price=False):
