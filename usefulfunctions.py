@@ -349,6 +349,11 @@ def plot_cumulative_profit_distribution(profit_per_scenario, title="Cumulative p
     plt.legend(fontsize=14)
     plt.show()
 
+def scenario_profit_stats(profit_matrix):
+    profit_per_scenario = profit_matrix.sum(axis=0)
+    return profit_per_scenario.min(), profit_per_scenario.max()
+
+
 
 def plot_profit_distribution_comparison(profit_per_scenario, profit_per_scenario_2, n_bins=15):
 

@@ -64,7 +64,13 @@ uf.plot_cumulative_profit_distribution(profit_per_scenario_2, title="Cumulative 
 # Profit comparison plot
 uf.plot_profit_distribution_comparison(profit_per_scenario, profit_per_scenario_2, n_bins=30)
 
+#%% 
+importlib.reload(uf)
+m_2, p_DA_2, Delta_up, Delta_down, profit_matrix_2 = uf.solve_stochastic_strategy_two_price(in_sample_scenarios)
+min_profit, max_profit = uf.scenario_profit_stats(profit_matrix_2)
 
+print(f"Min profit: {min_profit:.2f} MDKK")
+print(f"Max profit: {max_profit:.2f} MDKK")
 
 #%% -----------------------
 # Task 1.3) Cross-Validation of Offering Strategies
