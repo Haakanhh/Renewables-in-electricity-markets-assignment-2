@@ -23,8 +23,11 @@ n_insample_profiles = 100
 idx = sample_rng.choice(Load_profiles.shape[0], size=n_insample_profiles, replace=False)
 in_sample_profiles = Load_profiles[idx, :]
 
+# Epsilon under P90 requirement
+epsilon = 0.1
+
 #Budget for violation under P90 requirement
-q = 0.1*n_insample_profiles*60
+q = epsilon*n_insample_profiles*60
 
 # Solve ALSO-X optimization problem
 m, c_up_AlsoX, y, F_up_AlsoX =uf.Optimal_reserve_bid_ALSO_X (in_sample_profiles, q, M=10**4, silent=False)
@@ -84,3 +87,33 @@ share_profiles_with_violation_CVaR = n_profiles_with_violation_CVaR / n_out_prof
 
 print(f"ALSO-X -> profiles with >6 violations: {n_profiles_with_violation_AlsoX}/{n_out_profiles}, share: {share_profiles_with_violation_AlsoX:.4%}")
 print(f"CVaR -> profiles with >6 violations: {n_profiles_with_violation_CVaR}/{n_out_profiles}, share: {share_profiles_with_violation_CVaR:.4%}")
+
+#%% ----------------------
+# Task 2.3) Energinet Perspective
+# ------------------------
+
+# Sweep epsilon from 0.00 to 0.20 in steps of 0.01 and store the ALSO-X solution.
+epsilon_values = np.round(np.arange(0.00, 0.201, 0.01), 2)
+alsox_results = []
+
+for epsilon in epsilon_values:
+	# Budget for violation under P90 requirement
+	q = epsilon * n_insample_profiles * 60
+
+	# Solve ALSO-X optimization problem
+	m, c_up_AlsoX, y, F_up_AlsoX = uf.Optimal_reserve_bid_ALSO_X(in_sample_profiles, q, M=10**4, silent=True)
+
+	alsox_results.append({"epsilon": epsilon, "q": q, "c_up_AlsoX": c_up_AlsoX})
+	print(f"epsilon={epsilon:.2f}, c_up_AlsoX={c_up_AlsoX}")
+
+alsox_results_df = pd.DataFrame(alsox_results)
+
+#%%
+
+# Add reliability requirement (Pxx)
+alsox_results_df["Reliability requirement"] = alsox_results_df["epsilon"].apply(lambda e: f"P{int((1-e)*100)}")
+
+# Calculate share of unavailable points for each reliability requirement
+alsox_results_df["share_not_available"] = alsox_results_df["c_up_AlsoX"].apply(lambda c: (out_sample_profiles < c).sum() / n_points *100)
+
+uf.plot_Pxx_comparison(alsox_results_df)

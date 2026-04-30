@@ -823,3 +823,43 @@ def histogram_of_violations(c_up, F_up, title="Histogram of violations"):
     plt.tight_layout()
     plt.show()
     
+
+def plot_Pxx_comparison(alsox_results_df, title="Reliability requirement comparison"):
+    df = alsox_results_df.iloc[::-1].copy()
+
+    fig, ax1 = plt.subplots(figsize=(10, 6))
+    ax2 = ax1.twinx()
+
+    line1 = ax1.plot(
+        df["Reliability requirement"],
+        df["c_up_AlsoX"],
+        marker="o",
+        linewidth=2,
+        color="tab:blue",
+        label="Optimal reserve bid"
+    )
+
+    line2 = ax2.plot(
+        df["Reliability requirement"],
+        df["share_not_available"],
+        marker="s",
+        linewidth=2,
+        color="tab:orange",
+        label="Expected reserve shortfall"
+    )
+
+    ax1.set_xlabel("Reliability requirement")
+    ax1.set_ylabel("Reserve bid [kW]", color="tab:blue")
+    ax2.set_ylabel("Expected reserve shortfall [%]", color="tab:orange")
+
+    ax1.tick_params(axis="y", labelcolor="tab:blue")
+    ax2.tick_params(axis="y", labelcolor="tab:orange")
+
+    lines = line1 + line2
+    labels = [line.get_label() for line in lines]
+    ax1.legend(lines, labels, loc="best")
+
+    ax1.grid(True, alpha=0.3)
+    ax1.set_title(title)
+    fig.tight_layout()
+    plt.show()
