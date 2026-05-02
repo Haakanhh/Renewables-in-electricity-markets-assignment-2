@@ -70,7 +70,7 @@ uf.plot_profit_distribution_comparison(profit_per_scenario, profit_per_scenario_
 # Task 1.3) Cross-Validation of Offering Strategies
 # -------------------------
 
-folds = uf.create_folds(scenarios, n_in_sample=200, seed=rng) # Creates a list of arrays, each of shape (24, 200, 3)
+folds = uf.create_folds(scenarios, n_in_sample=100, seed=rng) # Creates a list of arrays, each of shape (24, 200, 3)
 
 # One-price cross-validation
 in_sample_means_one, out_sample_means_one = uf.cross_validate_folds(folds, two_price=False)
