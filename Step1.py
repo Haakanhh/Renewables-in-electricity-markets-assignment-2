@@ -76,7 +76,7 @@ print(f"Max profit: {max_profit:.2f} MDKK")
 # Task 1.3) Cross-Validation of Offering Strategies
 # -------------------------
 
-folds = uf.create_folds(scenarios, n_in_sample=100, seed=rng) # Creates a list of arrays, each of shape (24, 200, 3)
+folds = uf.create_folds(scenarios, n_in_sample=200, seed=rng) # Creates a list of arrays, each of shape (24, 200, 3)
 
 # One-price cross-validation
 in_sample_means_one, out_sample_means_one = uf.cross_validate_folds(folds, two_price=False)
@@ -101,73 +101,38 @@ print(f"Std out-of-sample profit:{np.std(out_sample_means_two):.3f}")
 uf.plot_Cross_Validation_Profits(in_sample_means_two, out_sample_means_two, title="Cross-Validation mean profits - Two-Price")
 
 
+# Results with varying in-sample size
+in_sample_list = [50, 100, 200, 400, 800]
+
+for n_in in in_sample_list:
+    folds_check = uf.create_folds(scenarios, n_in_sample=n_in, seed=rng)
+    in_means_one, out_means_one = uf.cross_validate_folds(folds_check, two_price=False, silent=True)
+    in_means_two, out_means_two = uf.cross_validate_folds(folds_check, two_price=True, silent=True)
+
+    print(f"In-sample size: {n_in}")
+    print(f"One-Price mean in-sample profit:  {np.mean(in_means_one):.15f} +- {np.std(in_means_one):.3f} MDKK")
+    print(f"One-Price mean out-of-sample profit: {np.mean(out_means_one):.15f} +- {np.std(out_means_one):.3f} MDKK")
+    print(f"Two-Price mean in-sample profit:  {np.mean(in_means_two):.15f} +- {np.std(in_means_two):.3f} MDKK")
+    print(f"Two-Price mean out-of-sample profit: {np.mean(out_means_two):.15f} +- {np.std(out_means_two):.3f} MDKK")
+    print("-" * 50)
+
 
 #%% -------------------
 # Task 1.4) Risk-Averse Offering Strategy
 # ---------------------
 
-beta_range = np.linspace(1e-3, 1, 20)
+beta_range = np.linspace(1e-6, 1, 20)
 
-exp_profit = []
-cvar_list = []
+exp_profit_one, cvar_list_one = uf.compute_profit_cvar_tradeoff(in_sample_scenarios, beta_range, scheme="one_price")
 
-for b in beta_range:
-    _, _, _, profit_matrix, cvar = uf.solve_risk_averse_one_price(in_sample_scenarios, alpha=0.9, beta=b, silent=True)
-    profit_per_scenario = profit_matrix.sum(axis=0)
-    expected_profit = profit_per_scenario.mean()
-    exp_profit.append(expected_profit)
-    cvar_list.append(cvar)
-    print(f"beta={b:.2f}: E[profit]={expected_profit:.3f}, CVaR={cvar:.3f}")
+uf.plot_profit_cvar_tradeoff(cvar_list_one, exp_profit_one, beta_range, annotate=False)
+
+# Two price
+
+exp_profit_two, cvar_list_two = uf.compute_profit_cvar_tradeoff(in_sample_scenarios, beta_range, scheme="two_price")
 
 
-plt.figure(figsize=(8, 6))
-plt.plot(cvar_list, exp_profit, marker='o', linewidth=2)
-
-# Annotate a few beta values
-for i, b in enumerate(beta_range):
-    if i % 4 == 0:  # annotate every 4th point to avoid clutter
-        plt.annotate(f"β={b:.2f}", (cvar_list[i], exp_profit[i]),
-                     textcoords="offset points", xytext=(6, 4), fontsize=9)
-
-plt.xlabel("CVaR (MDKK)", fontsize=13)
-plt.ylabel("Expected Profit (MDKK)", fontsize=13)
-plt.title("Expected Profit vs CVaR tradeoff (α=0.9)", fontsize=15)
-plt.grid(True, alpha=0.3)
-plt.tight_layout()
-plt.show()
-
-
-#%% Two price
-
-exp_profit = []
-cvar_list = []
-
-for b in beta_range:
-    _, _, profit_matrix, cvar = uf.solve_risk_averse_two_price(in_sample_scenarios, alpha=0.9, beta=b, silent=True)
-    profit_per_scenario = profit_matrix.sum(axis=0)
-    expected_profit = profit_per_scenario.mean()
-    exp_profit.append(expected_profit)
-    cvar_list.append(cvar)
-    print(f"beta={b:.2f}: E[profit]={expected_profit:.3f}, CVaR={cvar:.3f}")
-
-
-plt.figure(figsize=(8, 6))
-plt.plot(cvar_list, exp_profit, marker='o', linewidth=2)
-
-# Annotate a few beta values
-for i, b in enumerate(beta_range):
-    if i % 4 == 0:  # annotate every 4th point to avoid clutter
-        plt.annotate(f"β={b:.2f}", (cvar_list[i], exp_profit[i]),
-                     textcoords="offset points", xytext=(6, 4), fontsize=9)
-
-plt.xlabel("CVaR (MDKK)", fontsize=13)
-plt.ylabel("Expected Profit (MDKK)", fontsize=13)
-plt.title("Expected Profit vs CVaR tradeoff (α=0.9)", fontsize=15)
-plt.grid(True, alpha=0.3)
-plt.tight_layout()
-plt.show()
-
-
+uf.plot_profit_cvar_tradeoff(cvar_list_two, exp_profit_two, beta_range)
 
 
 
@@ -296,6 +261,7 @@ plt.show()
 # %%
 
 # compute deficit probabilities from folds
+
 deficit_probs_all = np.array([
     fold[:, :, 2].mean(axis=1) for fold in folds
 ])

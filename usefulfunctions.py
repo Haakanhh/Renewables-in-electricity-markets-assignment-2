@@ -393,7 +393,7 @@ def create_folds(scenarios, n_in_sample, seed=42):
 
     return folds
 
-def cross_validate_folds(folds, two_price=False):
+def cross_validate_folds(folds, two_price=False, silent=False):
 
     in_sample_means = []
     out_sample_means = []
@@ -425,9 +425,10 @@ def cross_validate_folds(folds, two_price=False):
         in_sample_means.append(in_sample_profit.mean())
         out_sample_means.append(profit_out.mean())
 
-        print(f"Fold {i+1}: in={in_sample_profit.mean():.3f}, out={profit_out.mean():.3f}")
-        print("DA offers: ", p_DA_vec)
-        print("deficit probabilities: ", fold[:, :, 2].mean(axis=1))
+        if silent == False:
+            print(f"Fold {i+1}: in={in_sample_profit.mean():.3f}, out={profit_out.mean():.3f}")
+            print("DA offers: ", p_DA_vec)
+            print("deficit probabilities: ", fold[:, :, 2].mean(axis=1))
 
     return in_sample_means, out_sample_means, 
 
@@ -525,7 +526,7 @@ def solve_risk_averse_one_price(in_sample_scenarios, alpha=0.9, beta=0, silent=F
     # Variables
     p_DA = m.addVars(n_hours, lb=0, name="DayAhead offer")
     Delta = m.addVars(n_hours, n_scenarios, lb=-gp.GRB.INFINITY, ub=gp.GRB.INFINITY, name="Difference_DA_real")
-    zeta = m.addVar(lb=0, name = "VaR")
+    zeta = m.addVar(lb=-gp.GRB.INFINITY, name = "VaR")
     eta = m.addVars(n_scenarios, lb=0, name = "auxillary_helper_variable")
 
     # Objective
@@ -595,7 +596,7 @@ def solve_risk_averse_two_price(in_sample_scenarios, alpha=0.9, beta=0, silent=F
     p_DA = m.addVars(n_hours, lb=0, name="DayAhead offer")
     Delta_up = m.addVars(n_hours, n_scenarios, lb=0, name="difference over 0")
     Delta_down = m.addVars(n_hours, n_scenarios, lb=0, name="difference under 0")
-    zeta = m.addVar(lb=0, name="VaR")
+    zeta = m.addVar(lb=-gp.GRB.INFINITY, name="VaR")
     eta = m.addVars(n_scenarios, lb=0, name="auxiliary_helper_variable")
 
     # Objective
@@ -648,6 +649,46 @@ def solve_risk_averse_two_price(in_sample_scenarios, alpha=0.9, beta=0, silent=F
     cvar = zeta_val - (1/(1-alpha)) * prob_scenarios * eta_vec.sum()
 
     return m, p_DA_vec, profit_matrix, cvar
+
+
+def plot_profit_cvar_tradeoff(cvar_list, exp_profit, beta_range, annotate=True):
+    plt.figure(figsize=(8, 6))
+    plt.plot(cvar_list, exp_profit, marker='o', linewidth=2)
+
+    if annotate:
+        for i, b in enumerate(beta_range):
+            if i % 3 == 0:
+                plt.annotate(f"β={b:.2f}", (cvar_list[i], exp_profit[i]),
+                             textcoords="offset points", xytext=(6, 4), fontsize=12)
+
+    plt.xlabel("CVaR (MDKK)", fontsize=16)
+    plt.ylabel("Expected Profit (MDKK)", fontsize=16)
+    plt.xticks(fontsize=12)
+    plt.yticks(fontsize=12)
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+
+
+def compute_profit_cvar_tradeoff(in_sample_scenarios, beta_range, alpha=0.9, scheme="two_price"):
+    exp_profit = []
+    cvar_list = []
+
+    for b in beta_range:
+        if scheme == "two_price":
+            _, _, profit_matrix, cvar = solve_risk_averse_two_price(in_sample_scenarios, alpha=alpha, beta=b, silent=False)
+        elif scheme == "one_price":
+            _, _, _, profit_matrix, cvar = solve_risk_averse_one_price(in_sample_scenarios, alpha=alpha, beta=b, silent=False)
+
+        profit_per_scenario = profit_matrix.sum(axis=0)
+        expected_profit = profit_per_scenario.mean()
+        exp_profit.append(expected_profit)
+        cvar_list.append(cvar)
+        print(f"beta={b:.2f}: E[profit]={expected_profit:.3f}, CVaR={cvar:.3f}")
+
+    return exp_profit, cvar_list
+
+
 
 
 def Load_profile_generation(random_state=None, Profiles=300, P_max=600, P_min=220, P_delta=35):
