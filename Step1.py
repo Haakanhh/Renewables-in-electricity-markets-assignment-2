@@ -79,7 +79,7 @@ print(f"Max profit: {max_profit:.2f} MDKK")
 folds = uf.create_folds(scenarios, n_in_sample=200, seed=rng) # Creates a list of arrays, each of shape (24, 200, 3)
 
 # One-price cross-validation
-in_sample_means_one, out_sample_means_one = uf.cross_validate_folds(folds, two_price=False)
+in_sample_means_one, out_sample_means_one = uf.cross_validate_folds(folds, two_price=False, silent=True)
 
 print(f"One-Price mean in-sample profit:  {np.mean(in_sample_means_one):.15f} MDKK")
 print(f"One-Price mean out-of-sample profit: {np.mean(out_sample_means_one):.15f} MDKK")
@@ -90,7 +90,7 @@ print(f"Std out-of-sample profit:{np.std(out_sample_means_one):.3f}")
 uf.plot_Cross_Validation_Profits(in_sample_means_one, out_sample_means_one, title="Cross-Validation mean profits - One-Price")
 
 # Two_Price cross-validation
-in_sample_means_two, out_sample_means_two = uf.cross_validate_folds(folds, two_price=True)
+in_sample_means_two, out_sample_means_two = uf.cross_validate_folds(folds, two_price=True, silent=True)
 
 print(f"Two-Price mean in-sample profit:  {np.mean(in_sample_means_two):.15f} MDKK")
 print(f"Two-Price mean out-of-sample profit: {np.mean(out_sample_means_two):.15f} MDKK")
@@ -123,20 +123,22 @@ for n_in in in_sample_list:
 
 beta_range = np.linspace(1e-6, 1, 20)
 
-exp_profit_one, cvar_list_one = uf.compute_profit_cvar_tradeoff(in_sample_scenarios, beta_range, scheme="one_price")
+exp_profit_one, cvar_list_one, p_DA_list_one = uf.compute_profit_cvar_tradeoff(in_sample_scenarios, beta_range, scheme="one_price")
 
 uf.plot_profit_cvar_tradeoff(cvar_list_one, exp_profit_one, beta_range, annotate=False)
 
+uf.plot_DA_offers_risk(beta_range, p_DA_list_one)
+
+
 # Two price
 
-exp_profit_two, cvar_list_two = uf.compute_profit_cvar_tradeoff(in_sample_scenarios, beta_range, scheme="two_price")
+exp_profit_two, cvar_list_two, p_DA_list_two = uf.compute_profit_cvar_tradeoff(in_sample_scenarios, beta_range, scheme="two_price")
 
 
 uf.plot_profit_cvar_tradeoff(cvar_list_two, exp_profit_two, beta_range)
 
 
-
-
+uf.plot_DA_offers_risk(beta_range, p_DA_list_two)
 
 
 

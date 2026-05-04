@@ -571,7 +571,7 @@ def solve_risk_averse_one_price(in_sample_scenarios, alpha=0.9, beta=0, silent=F
     eta_vec = np.array([eta[s].X for s in range(n_scenarios)])
     cvar = zeta_val - (1/(1-alpha)) * prob_scenarios * eta_vec.sum()
 
-    return m, p_DA_vec, Delta, profit_matrix, cvar
+    return m, p_DA_vec, Delta, profit_matrix, cvar, eta_vec
 
 
 def solve_risk_averse_two_price(in_sample_scenarios, alpha=0.9, beta=0, silent=False):
@@ -648,7 +648,7 @@ def solve_risk_averse_two_price(in_sample_scenarios, alpha=0.9, beta=0, silent=F
     eta_vec  = np.array([eta[s].X for s in range(n_scenarios)])
     cvar = zeta_val - (1/(1-alpha)) * prob_scenarios * eta_vec.sum()
 
-    return m, p_DA_vec, profit_matrix, cvar
+    return m, p_DA_vec, profit_matrix, cvar, eta_vec
 
 
 def plot_profit_cvar_tradeoff(cvar_list, exp_profit, beta_range, annotate=True):
@@ -673,22 +673,88 @@ def plot_profit_cvar_tradeoff(cvar_list, exp_profit, beta_range, annotate=True):
 def compute_profit_cvar_tradeoff(in_sample_scenarios, beta_range, alpha=0.9, scheme="two_price"):
     exp_profit = []
     cvar_list = []
-
+    p_DA_all = []
+    
     for b in beta_range:
         if scheme == "two_price":
-            _, _, profit_matrix, cvar = solve_risk_averse_two_price(in_sample_scenarios, alpha=alpha, beta=b, silent=False)
+            _, p_DA_vec, profit_matrix, cvar, _ = solve_risk_averse_two_price(
+                in_sample_scenarios, alpha=alpha, beta=b, silent=False)
+
         elif scheme == "one_price":
-            _, _, _, profit_matrix, cvar = solve_risk_averse_one_price(in_sample_scenarios, alpha=alpha, beta=b, silent=False)
+            _, p_DA_vec, _, profit_matrix, cvar, _ = solve_risk_averse_one_price(
+                in_sample_scenarios, alpha=alpha, beta=b, silent=False)
 
         profit_per_scenario = profit_matrix.sum(axis=0)
         expected_profit = profit_per_scenario.mean()
+
         exp_profit.append(expected_profit)
         cvar_list.append(cvar)
+        p_DA_all.append(p_DA_vec)
+
         print(f"beta={b:.2f}: E[profit]={expected_profit:.3f}, CVaR={cvar:.3f}")
 
-    return exp_profit, cvar_list
+    return exp_profit, cvar_list, p_DA_all
 
 
+def plot_DA_offers_risk(beta_range, p_DA_list, tol=1e-6):
+    import numpy as np
+    import matplotlib.pyplot as plt
+
+    hours = np.arange(24)
+    plt.figure(figsize=(12, 6))
+
+    # --- Group identical full-day strategies
+    unique_strategies = []
+    group_indices = []
+
+    for i, p in enumerate(p_DA_list):
+        found = False
+        for j, ref in enumerate(unique_strategies):
+            if np.allclose(p, ref, atol=tol):
+                group_indices[j].append(i)
+                found = True
+                break
+        if not found:
+            unique_strategies.append(p)
+            group_indices.append([i])
+
+    # --- Assign colors per unique strategy
+    cmap = plt.cm.get_cmap("tab10", len(unique_strategies))
+    distinct_colors = ["tab:blue", "tab:orange", "tab:green", "tab:red", "tab:purple"]
+
+    for g_idx, indices in enumerate(group_indices):
+        color = distinct_colors[g_idx % len(distinct_colors)]
+        
+        for k, i in enumerate(indices):
+            b = beta_range[i]
+
+            plt.step(
+                hours,
+                p_DA_list[i],
+                where="post",
+                #marker="o",
+                linewidth=2 + 1*len(indices),
+                alpha=0.7,
+                color=color,
+                # Only label once per group
+                label=f"β ∈ [{beta_range[indices[0]]:.2f}, {beta_range[indices[-1]]:.2f}]" if k == 0 else None
+            )
+
+    # --- Styling (match your original)
+    plt.xlabel("Hour", fontsize=16)
+    plt.ylabel("DA Offer (MW)", fontsize=16)
+    #plt.title("Day-ahead offers for different β", fontsize=)
+
+    plt.xticks(np.arange(24), fontsize=12)
+    plt.yticks(fontsize=12)
+    plt.xlim(0, 23)
+    plt.ylim(0, 550)
+
+    plt.grid(True, alpha=0.3)
+    plt.legend(ncol=1, fontsize=16)
+
+    plt.tight_layout()
+    plt.show()
 
 
 def Load_profile_generation(random_state=None, Profiles=300, P_max=600, P_min=220, P_delta=35):
