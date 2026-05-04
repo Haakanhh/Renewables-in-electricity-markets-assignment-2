@@ -22,6 +22,8 @@ Load_profiles = uf.Load_profile_generation(random_state=seed, Profiles=300, P_ma
 sample_rng = np.random.default_rng(seed)
 n_insample_profiles = 100
 idx = sample_rng.choice(Load_profiles.shape[0], size=n_insample_profiles, replace=False)
+idx = sample_rng.choice(Load_profiles.shape[0], size=n_insample_profiles, replace=False)
+idx = sample_rng.choice(Load_profiles.shape[0], size=n_insample_profiles, replace=False)
 in_sample_profiles = Load_profiles[idx, :]
 
 # Epsilon under P90 requirement
@@ -134,3 +136,10 @@ alsox_results_df["mean_shortfall"] = alsox_results_df["c_up_AlsoX"].apply(
 )
 
 uf.plot_Pxx_comparison_mean(alsox_results_df)
+
+#%% The values of c_up_AlsoX and shortfall expressed as percentages from their starting value at P80
+normalized_df = uf.compute_normalized_Pxx_metrics(alsox_results_df)
+
+# If you want to access values programmatically:
+print(normalized_df.head())
+# %%

@@ -44,7 +44,7 @@ uf.plot_cumulative_profit_distribution(profit_per_scenario, title="Cumulative pr
 # Task 1.2) Offering Strategy Under a Two-Price Balancing Scheme
 # ------------------------
 
-# Use same 100 random scenarios as in Task 1.1
+# Use same 200 random scenarios as in Task 1.1
 # Solve optimization problem
 m_2, p_DA_2, Delta_up, Delta_down, profit_matrix_2 = uf.solve_stochastic_strategy_two_price(in_sample_scenarios)
 

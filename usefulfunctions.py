@@ -1136,3 +1136,46 @@ def plot_Pxx_comparison_mean(alsox_results_df, title="Reliability requirement co
     ax1.set_title(title)
     fig.tight_layout()
     plt.show()
+
+def compute_normalized_Pxx_metrics(alsox_results_df, p_min=80, p_max=100, verbose=True):
+    df = alsox_results_df.copy()
+
+    # Extract numeric Pxx
+    df["P_value"] = df["Reliability requirement"].str.extract(r'(\d+)').astype(int)
+
+    # Sort properly (P100 → P80)
+    df = df.sort_values("P_value", ascending=False).reset_index(drop=True)
+
+    # --- Anchor values ---
+    c_up_Pmin = df.loc[df["P_value"] == p_min, "c_up_AlsoX"].values[0]
+    c_up_Pmax = df.loc[df["P_value"] == p_max, "c_up_AlsoX"].values[0]
+
+    shortfall_Pmin = df.loc[df["P_value"] == p_min, "mean_shortfall"].values[0]
+    shortfall_Pmax = df.loc[df["P_value"] == p_max, "mean_shortfall"].values[0]
+
+    # --- Normalize ---
+    df["c_up_pct"] = (
+        (df["c_up_AlsoX"] - c_up_Pmax) / (c_up_Pmin - c_up_Pmax)
+    ) * 100
+
+    df["shortfall_pct"] = (
+        (df["mean_shortfall"] - shortfall_Pmax) / (shortfall_Pmin - shortfall_Pmax)
+    ) * 100
+
+    # --- Difference ---
+    df["difference_pct_points"] = df["c_up_pct"] - df["shortfall_pct"]
+
+    # --- Filter range ---
+    df_filtered = df[(df["P_value"] >= p_min) & (df["P_value"] <= p_max)].copy()
+
+    result = df_filtered[[
+        "Reliability requirement",
+        "c_up_pct",
+        "shortfall_pct",
+        "difference_pct_points"
+    ]]
+
+    if verbose:
+        print(result.to_string(index=False, float_format="%.2f"))
+
+    return result
