@@ -137,13 +137,111 @@ exp_profit_two, cvar_list_two, p_DA_list_two = uf.compute_profit_cvar_tradeoff(i
 
 uf.plot_profit_cvar_tradeoff(cvar_list_two, exp_profit_two, beta_range)
 
+# Only take 5 values from beta range for plotting DA offers
+chosen_beta_two = [beta_range[0], beta_range[6], beta_range[13],beta_range[19]]
+chosen_DA_offers_two = [p_DA_list_two[i] for i in [0, 6, 13, 19]]
+uf.plot_DA_offers_risk(chosen_beta_two, chosen_DA_offers_two)
 
-uf.plot_DA_offers_risk(beta_range, p_DA_list_two)
+
+
+#%% EXAMINING DA OFFERS IN RISK-AVERSION
+
+# Solve with beta = 1
+_, p_DA_vec_one, _, profit_matrix_one, cvar_one, eta_vec_one = uf.solve_risk_averse_one_price(in_sample_scenarios, alpha=0.9, beta=1)
+_, p_DA_vec_two, profit_matrix_two, cvar_two, eta_vec_two = uf.solve_risk_averse_two_price(in_sample_scenarios, alpha=0.9, beta=1)
+
+# Function that solves one-price with a fixed bid
+res_opt = uf.evaluate_fixed_bid_risk(in_sample_scenarios, p_DA_vec_one)
+
+# Solve with a slightly lower bid to see if worst scenarios change
+p_new = p_DA_vec_one.copy()
+p_new[5] += -1
+res_new = uf.evaluate_fixed_bid_risk(in_sample_scenarios, p_new)
+
+# 4. Compare results
+print(f"Optimal (43.586) CVaR: {res_opt['cvar']:.6f}")
+print(f"New Bid (42.586) CVaR: {res_new['cvar']:.6f}")
+print(f"\nWorst Scenarios at Optimal: {sorted(res_opt['worst_indices'])}")
+print(f"Worst Scenarios at New Bid: {sorted(res_new['worst_indices'])}")
+
+# Find which scenarios entered/left the tail
+new_entries = set(res_new['worst_indices']) - set(res_opt['worst_indices'])
+if new_entries:
+    print(f"Scenarios that became 'worst' due to higher bid: {new_entries}")
+
+# Check mean wind for worst-case scenario in 2-price case
+worst_idx= np.where(eta_vec_two > 1e-9)[0]
+average_wind_worst = in_sample_scenarios[:, worst_idx, 0].mean()
+average_wind_overall = in_sample_scenarios[:, :, 0].mean()
+print(f"\nAverage wind in worst-case scenarios: {average_wind_worst:.3f}")
+print(f"Average wind overall: {average_wind_overall:.3f}")
+
+
+#%% Change in profit distribution
+
+# Comparison one price
+profit_per_scenario_risk_1 = profit_matrix_one.sum(axis=0)
+print("Plot comparison of profit distributions for one-price strategy")
+print("Difference in total profit: ", round(profit_per_scenario.mean() - profit_per_scenario_risk_1.mean(),3), "MDKK")
+uf.plot_cdf_comparison_cvar(profit_per_scenario_risk_1, profit_per_scenario, label_a="Risk-averse", label_b="Risk-neutral", title=None)
+uf.plot_cdf_comparison_cvar(profit_per_scenario_risk_1, profit_per_scenario, label_a="Risk-averse", label_b="Risk-neutral", title=None, alpha=0)
+
+#Comparison two price
+profit_per_scenario_risk_2 = profit_matrix_two.sum(axis=0)
+print("Plot comparison of profit distributions for two-price strategy")
+print("Difference in total profit: ", round(profit_per_scenario_2.mean() - profit_per_scenario_risk_2.mean(),3), "MDKK")
+uf.plot_cdf_comparison_cvar(profit_per_scenario_risk_2, profit_per_scenario_2, label_a="Risk-averse", label_b="Risk-neutral", title=None)
+uf.plot_cdf_comparison_cvar(profit_per_scenario_risk_2, profit_per_scenario_2, label_a="Risk-averse", label_b="Risk-neutral", title=None, alpha=0)
 
 
 
+#%% Comparison of different in-sample scenarios
 
 
+_, p_DA_vec_comp, _, profit_matrix_comp, cvar_comp, eta_vec_comp = uf.solve_risk_averse_one_price(folds[1], alpha=0.9, beta=1)
+_, p_DA_vec_comp2, _, profit_matrix_comp2, cvar_comp2, eta_vec_comp2 = uf.solve_risk_averse_one_price(folds[2], alpha=0.9, beta=1)
+hours = np.arange(24)
+
+
+# Compare beta=1 solutions for insample and fold 1
+
+plt.figure(figsize=(12, 6))
+plt.step(hours, p_DA_vec_one, where='post', label="Beta=1, All Scenarios", linewidth=2)
+plt.step(hours, p_DA_vec_comp, where='post', label="Beta=1, Fold 1", linewidth=2)
+plt.step(hours, p_DA_vec_comp2, where='post', label="Beta=1, Fold 2", linewidth=2)
+plt.xticks(hours)
+plt.xlim(0, 23)
+plt.xlabel("Hour")
+plt.ylabel("DA Offer (MW)")
+
+plt.title("Comparison of DA Offers for Beta=1 with Different In-Sample Scenarios")
+plt.legend()
+plt.grid(True)
+plt.show()
+
+
+# Twoprice
+
+_, p_DA_vec_comp, profit_matrix_comp, cvar_comp, eta_vec_comp = uf.solve_risk_averse_two_price(folds[1], alpha=0.9, beta=1)
+_, p_DA_vec_comp2, profit_matrix_comp2, cvar_comp2, eta_vec_comp2 = uf.solve_risk_averse_two_price(folds[2], alpha=0.9, beta=1)
+hours = np.arange(24)
+
+
+# Compare beta=1 solutions for insample and fold 1
+
+plt.figure(figsize=(12, 6))
+plt.step(hours, p_DA_vec_two, where='post', label="Beta=1, All Scenarios", linewidth=2)
+plt.step(hours, p_DA_vec_comp, where='post', label="Beta=1, Fold 1", linewidth=2)
+plt.step(hours, p_DA_vec_comp2, where='post', label="Beta=1, Fold 2", linewidth=2)
+plt.xticks(hours)
+plt.xlim(0, 23)
+plt.xlabel("Hour")
+plt.ylabel("DA Offer (MW)")
+
+plt.title("Comparison of DA Offers for Beta=1 with Different In-Sample Scenarios")
+plt.legend()
+plt.grid(True)
+plt.show()
 
 
 
@@ -294,4 +392,3 @@ plt.legend(fontsize=legendsize)
 plt.grid(True, alpha=0.3)
 
 plt.show()
-# %%

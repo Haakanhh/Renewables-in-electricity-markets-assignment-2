@@ -321,33 +321,94 @@ def plot_profit_distribution(profit_per_scenario, n_bins = 15, title="Profit dis
     plt.legend(fontsize=16)
     plt.show()
 
-def plot_cumulative_profit_distribution(profit_per_scenario, title="Cumulative profit distribution"):
+def plot_cumulative_profit_distribution(profit_per_scenario, title="Cumulative profit distribution", tail_fraction=1.0, mean=True
+):
+
     plt.figure(figsize=(12, 6))
 
-    # Exact empirical CDF (no binning)
+    # Sort profits
     sorted_profit = np.sort(np.asarray(profit_per_scenario))
     n = sorted_profit.size
-    cdf = np.arange(1, n + 1) / n
 
-    plt.step(sorted_profit, cdf, where="post", linewidth=2, label="Empirical CDF")
+    # --- Select lowest fraction
+    k = int(np.ceil(tail_fraction * n))
+    subset_profit = sorted_profit[:k]
 
-    mean_profit = sorted_profit.mean()
-    plt.axvline(
-        mean_profit,
-        color="red",
-        linestyle="dashed",
-        label=f"Mean: {mean_profit:.2f} MDKK"
-    )
+    # Recompute CDF on subset
+    cdf = np.arange(1, k + 1) / k
+    if tail_fraction < 1.0:
+        label = f"Lowest {tail_fraction*100:.0f}%"
+    else:
+        label = "Empirical CDF"
+
+    plt.step(subset_profit, cdf, where="post", linewidth=2,
+             label=label)
+
+    # Mean of full distribution (optional, usually more meaningful)
+    if mean:
+        mean_profit = sorted_profit.mean()
+        plt.axvline(
+            mean_profit,
+            color="red",
+            linestyle="dashed",
+            label=f"Mean (all): {mean_profit:.2f} MDKK"
+        )
 
     plt.title(title, fontsize=18)
     plt.xlabel("Total profit per scenario (MDKK)", fontsize=14)
-    plt.ylabel("Cumulative probability", fontsize=14)
+    plt.ylabel("Cumulative probability (subset)", fontsize=14)
     plt.xticks(fontsize=14)
     plt.yticks(fontsize=14)
     plt.ylim(0, 1.02)
     plt.grid(True, alpha=0.3)
     plt.legend(fontsize=14)
     plt.show()
+
+def plot_cdf_comparison_cvar(
+    profit_a,
+    profit_b,
+    label_a="Strategy A",
+    label_b="Strategy B",
+    title="CDF comparison (CVaR view)",
+    alpha=0.9
+):
+    import numpy as np
+    import matplotlib.pyplot as plt
+
+    plt.figure(figsize=(8, 6))
+
+    def prepare(profit):
+        sorted_profit = np.sort(np.asarray(profit))
+        n = len(sorted_profit)
+        cdf = np.arange(1, n + 1) / n
+        var = np.quantile(sorted_profit, 1-alpha)
+        return sorted_profit, cdf, var
+
+    # --- Prepare both strategies
+    x_a, cdf_a, var_a = prepare(profit_a)
+    x_b, cdf_b, var_b = prepare(profit_b)
+
+    # --- Plot full CDFs
+    plt.step(x_a, cdf_a, where="post", linewidth=2, label=label_a)
+    plt.step(x_b, cdf_b, where="post", linewidth=2, label=label_b)
+
+    # --- Only show tail
+    plt.ylim(0, 1-alpha+0.01)
+    plt.xlim(min(x_a.min(), x_b.min()), max(var_a, var_b))
+
+    # --- Labels
+    plt.title(title, fontsize=18)
+    plt.xlabel("Total profit per scenario (MDKK)", fontsize=14)
+    plt.ylabel("Cumulative probability", fontsize=14)
+
+    plt.xticks(fontsize=14)
+    plt.yticks(fontsize=14)
+
+    plt.grid(True, alpha=0.3)
+    plt.legend(fontsize=13)
+    plt.tight_layout()
+    plt.show()
+
 
 def scenario_profit_stats(profit_matrix):
     profit_per_scenario = profit_matrix.sum(axis=0)
@@ -701,7 +762,7 @@ def plot_DA_offers_risk(beta_range, p_DA_list, tol=1e-6):
     import matplotlib.pyplot as plt
 
     hours = np.arange(24)
-    plt.figure(figsize=(12, 6))
+    plt.figure(figsize=(8, 6))
 
     # --- Group identical full-day strategies
     unique_strategies = []
@@ -728,6 +789,12 @@ def plot_DA_offers_risk(beta_range, p_DA_list, tol=1e-6):
         for k, i in enumerate(indices):
             b = beta_range[i]
 
+
+            if len(indices) > 1:
+                label = f"β ∈ [{beta_range[indices[0]]:.2f}, {beta_range[indices[-1]]:.2f}]" if k == 0 else None
+            else:
+                label = f"β={b:.2f}" if k == 0 else None
+
             plt.step(
                 hours,
                 p_DA_list[i],
@@ -737,7 +804,7 @@ def plot_DA_offers_risk(beta_range, p_DA_list, tol=1e-6):
                 alpha=0.7,
                 color=color,
                 # Only label once per group
-                label=f"β ∈ [{beta_range[indices[0]]:.2f}, {beta_range[indices[-1]]:.2f}]" if k == 0 else None
+                label=label
             )
 
     # --- Styling (match your original)
@@ -755,6 +822,52 @@ def plot_DA_offers_risk(beta_range, p_DA_list, tol=1e-6):
 
     plt.tight_layout()
     plt.show()
+
+
+# %%
+import numpy as np
+
+def evaluate_fixed_bid_risk(in_sample_scenarios, p_DA_input, alpha=0.9):
+    """
+    Calculates profit and identifies worst scenarios for a FIXED p_DA vector.
+    """
+    n_hours, n_scenarios, _ = in_sample_scenarios.shape
+    p_real = in_sample_scenarios[:, :, 0]
+    lambda_DA = in_sample_scenarios[:, :, 1]
+    deficit_bin = in_sample_scenarios[:, :, 2]
+    
+    # One-price balancing logic
+    lambda_bal = 1.25 * lambda_DA * deficit_bin + 0.85 * lambda_DA * (1 - deficit_bin)
+    
+    # Calculate profit matrix and daily totals
+    # p_DA_input[:, None] broadcasts the 24h bids across all scenarios
+    profit_matrix = (lambda_DA * p_DA_input[:, None]) + (lambda_bal * (p_real - p_DA_input[:, None]))
+    daily_profits = np.sum(profit_matrix, axis=0)
+    
+    # Identify the Tail (Worst Scenarios)
+    # CVaR is the mean of the worst (1-alpha) fraction of scenarios
+    n_tail = int(np.ceil(n_scenarios * (1 - alpha)))
+    sorted_indices = np.argsort(daily_profits)
+    worst_indices = sorted_indices[:n_tail]
+    
+    # Calculate VaR (the profit of the best scenario in the worst group)
+    zeta_val = daily_profits[sorted_indices[n_tail - 1]]
+    
+    # Calculate CVaR
+    cvar_val = np.mean(daily_profits[worst_indices])
+    
+    # Calculate eta (how much each scenario falls below VaR)
+    # Matches Gurobi: eta[s] = max(0, zeta - daily_profit[s])
+    eta_vec = np.maximum(0, zeta_val - daily_profits)
+    
+    return {
+        "cvar": cvar_val,
+        "zeta": zeta_val,
+        "worst_indices": worst_indices,
+        "daily_profits": daily_profits,
+        "eta_vec": eta_vec
+    }
+
 
 
 def Load_profile_generation(random_state=None, Profiles=300, P_max=600, P_min=220, P_delta=35):
