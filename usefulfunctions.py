@@ -915,16 +915,19 @@ def histogram_of_violations(c_up, F_up, title="Histogram of violations"):
     # Create histogram using unique counts and their frequencies
     unique_counts, counts = np.unique(violations_per_profile, return_counts=True)
     
-    plt.figure(figsize=(10, 6))
+
+    plt.figure(figsize=(6, 4))
     plt.bar(unique_counts, counts, width=0.8, edgecolor='black', alpha=0.7)
     plt.axvline(6, color='darkgreen', linestyle='--', linewidth=2, 
                 label=f'P90 target (6 violations)')
     plt.axvline(mean_violations, color='darkred', linestyle=':', linewidth=2, 
                 label=f'Mean: {mean_violations:.2f}')
-    plt.xlabel("Number of violations per profile", fontsize=14)
-    plt.ylabel("Number of profiles", fontsize=14)
-    plt.title(title, fontsize=16)
-    plt.xticks(unique_counts)
+    plt.xlabel("Number of violations per profile", fontsize=13)
+    plt.ylabel("Number of profiles", fontsize=13)
+    plt.xticks(fontsize=13)
+    plt.yticks(fontsize=13)
+    plt.xlim(-2, 42)
+    plt.title(title, fontsize=15)
     plt.grid(True, alpha=0.3, axis='y')
     plt.legend(fontsize=13)
     plt.tight_layout()
@@ -958,6 +961,56 @@ def plot_Pxx_comparison(alsox_results_df, title="Reliability requirement compari
     ax1.set_xlabel("Reliability requirement")
     ax1.set_ylabel("Reserve bid [kW]", color="tab:blue")
     ax2.set_ylabel("Expected reserve shortfall [%]", color="tab:orange")
+
+    ax1.tick_params(axis="y", labelcolor="tab:blue")
+    ax2.tick_params(axis="y", labelcolor="tab:orange")
+
+    lines = line1 + line2
+    labels = [line.get_label() for line in lines]
+    ax1.legend(lines, labels, loc="best")
+
+    ax1.grid(True, alpha=0.3)
+    ax1.set_title(title)
+    fig.tight_layout()
+    plt.show()
+
+
+def plot_Pxx_comparison_mean(alsox_results_df, title="Reliability requirement comparison"):
+    df = alsox_results_df.iloc[::-1].copy()
+
+    fig, ax1 = plt.subplots(figsize=(7, 4))
+    ax2 = ax1.twinx()
+
+    x = np.arange(len(df))
+    labels = df["Reliability requirement"].astype(str).values
+
+
+    line1 = ax1.plot(
+        df["Reliability requirement"],
+        df["c_up_AlsoX"],
+        marker="o",
+        linewidth=2,
+        color="tab:blue",
+        label="Optimal reserve bid"
+    )
+
+    line2 = ax2.plot(
+        df["Reliability requirement"],
+        df["mean_shortfall"],
+        marker="s",
+        linewidth=2,
+        color="tab:orange",
+        label="Mean reserve shortfall"
+    )
+
+    ax1.set_xlabel("Reliability requirement")
+    ax1.set_ylabel("Reserve bid [kW]", color="tab:blue")
+    ax2.set_ylabel("Mean shortfall [kW]", color="tab:orange")
+
+    tick_step = 2
+    ax1.set_xticks(x[::tick_step])
+    ax1.set_xticklabels(labels[::tick_step])
+    plt.setp(ax1.get_xticklabels(), rotation=0, ha="center")
 
     ax1.tick_params(axis="y", labelcolor="tab:blue")
     ax2.tick_params(axis="y", labelcolor="tab:orange")

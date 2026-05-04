@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import usefulfunctions as uf
 import matplotlib.pyplot as plt
+import time
 
 importlib.reload(uf)
 
@@ -33,7 +34,7 @@ q = epsilon*n_insample_profiles*60
 m, c_up_AlsoX, y, F_up_AlsoX =uf.Optimal_reserve_bid_ALSO_X (in_sample_profiles, q, M=10**4, silent=False)
 
 print(c_up_AlsoX)
-
+#%%
 uf.histogram_of_violations(c_up_AlsoX, F_up_AlsoX, title="Histogram of violations per profile - ALSO-X")
 
 #%%
@@ -96,6 +97,8 @@ print(f"CVaR -> profiles with >6 violations: {n_profiles_with_violation_CVaR}/{n
 epsilon_values = np.round(np.arange(0.00, 0.201, 0.01), 2)
 alsox_results = []
 
+start_time = time.time()
+
 for epsilon in epsilon_values:
 	# Budget for violation under P90 requirement
 	q = epsilon * n_insample_profiles * 60
@@ -106,7 +109,13 @@ for epsilon in epsilon_values:
 	alsox_results.append({"epsilon": epsilon, "q": q, "c_up_AlsoX": c_up_AlsoX})
 	print(f"epsilon={epsilon:.2f}, c_up_AlsoX={c_up_AlsoX}")
 
+end_time = time.time()
+elapsed_time = end_time - start_time
+
+print(f"\nLoop completed in {elapsed_time:.2f} seconds")
+
 alsox_results_df = pd.DataFrame(alsox_results)
+
 
 #%%
 
@@ -117,3 +126,11 @@ alsox_results_df["Reliability requirement"] = alsox_results_df["epsilon"].apply(
 alsox_results_df["share_not_available"] = alsox_results_df["c_up_AlsoX"].apply(lambda c: (out_sample_profiles < c).sum() / n_points *100)
 
 uf.plot_Pxx_comparison(alsox_results_df)
+
+#%%
+
+alsox_results_df["mean_shortfall"] = alsox_results_df["c_up_AlsoX"].apply(
+    lambda c: np.maximum(c - out_sample_profiles, 0).mean()
+)
+
+uf.plot_Pxx_comparison_mean(alsox_results_df)
