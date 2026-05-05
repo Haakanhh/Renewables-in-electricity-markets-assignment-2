@@ -869,6 +869,146 @@ def evaluate_fixed_bid_risk(in_sample_scenarios, p_DA_input, alpha=0.9):
     }
 
 
+# %%
+def compute_DA_offer_samples(
+    n_runs=50,
+    n_in_sample=200,
+    alpha=0.9,
+    beta=1,
+    n_wind=20,
+    n_price=20,
+    n_surp_def=4,
+    seed=42
+):
+    rng_master = np.random.default_rng(seed)
+    p_DA_list = []
+    profit_list = []
+    cvar_list = []
+
+    for run in range(n_runs):
+        rng = np.random.default_rng(rng_master.integers(0, 1e9))
+
+        # Generate scenarios
+        scenarios = generate_scenarios(
+            random_state=rng,
+            n_wind=n_wind,
+            n_price=n_price,
+            n_surp_def=n_surp_def
+        )
+
+        # Sample in-sample set
+        idx = rng.choice(scenarios.shape[1], size=n_in_sample, replace=False)
+        in_sample = scenarios[:, idx, :]
+
+        # Solve
+        _, p_DA, profit, cvar, _ = solve_risk_averse_two_price(
+            in_sample, alpha=alpha, beta=beta, silent=True
+        )
+
+        p_DA_list.append(p_DA)
+        profit_list.append(profit)
+        cvar_list.append(cvar)
+
+        # Progress print every 10 runs
+        if (run + 1) % 10 == 0 or run == 0:
+            print(f"Computed {run + 1}/{n_runs} DA offers")
+
+    return np.array(p_DA_list), np.array(profit_list).mean(axis=2), np.array(cvar_list)
+
+def plot_DA_offer_folds(folds):
+    
+    hours = np.arange(24)
+
+    plt.figure(figsize=(8, 6))
+    # Loop over all folds
+    import itertools
+
+    linestyles = itertools.cycle(['-', '--', '-.', ':'])
+
+    for i, fold in enumerate(folds):
+        _, p_DA_vec_fold, _, _, _ = solve_risk_averse_two_price(
+            fold, alpha=0.9, beta=1, silent=True
+        )
+
+        plt.step(
+            hours,
+            p_DA_vec_fold,
+            where='post',
+            linestyle=next(linestyles),
+            label=f"Fold {i+1}",
+            linewidth=2.5,
+            alpha=0.8
+        )
+
+    plt.xticks(hours)
+    plt.xlim(0, 23)
+    plt.xlabel("Hour", fontsize=16)
+    plt.ylabel("DA Offer (MW)", fontsize=16)
+    plt.title("DA Offers for Beta=1 Across All Folds", fontsize=20)
+    plt.legend(fontsize=14)
+    plt.xticks(fontsize=12)
+    plt.yticks(fontsize=12)
+    plt.grid(True)
+    plt.show()
+
+
+
+def plot_scatter_profit_cvar(profit_list, cvar_list):
+    plt.figure(figsize=(7, 6))
+
+    coef = np.polyfit(cvar_list, profit_list, 1)
+    slope, intercept = coef
+
+    x = np.linspace(0, max(cvar_list), 100)
+    y = slope * x + intercept
+
+    y_pred = slope * np.array(cvar_list) + intercept
+    ss_res = np.sum((np.array(profit_list) - y_pred)**2)
+    ss_tot = np.sum((np.array(profit_list) - np.mean(profit_list))**2)
+    r2 = 1 - ss_res / ss_tot
+
+
+    plt.scatter(cvar_list, profit_list, alpha=0.7)
+    plt.plot(x, y, color='red', label=f"Fit: y = {slope:.2f}x + {intercept:.2f}\n$R^2$ = {r2:.3f}")
+    plt.xlabel("CVaR")
+    plt.ylabel("Expected Profit")
+    plt.title("CVaR vs Expected Profit (In-sample across seeds)")
+
+    plt.grid(True, alpha=0.3)
+    plt.legend()
+
+    plt.xlim(left=0)
+    plt.ylim(bottom=min(profit_list)-1)
+    plt.show()
+
+def plot_boxplot_profit_cvar(profit_list, cvar_list):
+    plt.figure(figsize=(8, 6))
+
+    data = [profit_list, cvar_list]
+
+    box = plt.boxplot(
+        data,
+        patch_artist=True,   # allows coloring
+        labels=["Expected Profit", "CVaR"]
+    )
+
+    # Add colors
+    colors = ["skyblue", "salmon"]
+    for patch, color in zip(box['boxes'], colors):
+        patch.set_facecolor(color)
+
+    # Optional styling tweaks
+    for median in box['medians']:
+        median.set_color('black')
+        median.set_linewidth(2)
+
+    plt.ylabel("MDKK")
+    plt.title("In-sample Profit vs CVaR Across Scenario Seeds")
+    plt.grid(axis='y', alpha=0.3)
+
+    plt.show()
+
+
 
 def Load_profile_generation(random_state=None, Profiles=300, P_max=600, P_min=220, P_delta=35):
     """

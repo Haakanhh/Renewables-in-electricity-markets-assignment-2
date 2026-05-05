@@ -195,57 +195,14 @@ uf.plot_cdf_comparison_cvar(profit_per_scenario_risk_2, profit_per_scenario_2, l
 
 
 
-#%% Comparison of different in-sample scenarios
+#%% EXAMINE VARIATION IN FOLD OR INPUT DATA
 
+uf.plot_DA_offer_folds(folds)
 
-_, p_DA_vec_comp, _, profit_matrix_comp, cvar_comp, eta_vec_comp = uf.solve_risk_averse_one_price(folds[1], alpha=0.9, beta=1)
-_, p_DA_vec_comp2, _, profit_matrix_comp2, cvar_comp2, eta_vec_comp2 = uf.solve_risk_averse_one_price(folds[2], alpha=0.9, beta=1)
-hours = np.arange(24)
-
-
-# Compare beta=1 solutions for insample and fold 1
-
-plt.figure(figsize=(12, 6))
-plt.step(hours, p_DA_vec_one, where='post', label="Beta=1, All Scenarios", linewidth=2)
-plt.step(hours, p_DA_vec_comp, where='post', label="Beta=1, Fold 1", linewidth=2)
-plt.step(hours, p_DA_vec_comp2, where='post', label="Beta=1, Fold 2", linewidth=2)
-plt.xticks(hours)
-plt.xlim(0, 23)
-plt.xlabel("Hour")
-plt.ylabel("DA Offer (MW)")
-
-plt.title("Comparison of DA Offers for Beta=1 with Different In-Sample Scenarios")
-plt.legend()
-plt.grid(True)
-plt.show()
-
-
-# Twoprice
-
-_, p_DA_vec_comp, profit_matrix_comp, cvar_comp, eta_vec_comp = uf.solve_risk_averse_two_price(folds[1], alpha=0.9, beta=1)
-_, p_DA_vec_comp2, profit_matrix_comp2, cvar_comp2, eta_vec_comp2 = uf.solve_risk_averse_two_price(folds[2], alpha=0.9, beta=1)
-hours = np.arange(24)
-
-
-# Compare beta=1 solutions for insample and fold 1
-
-plt.figure(figsize=(12, 6))
-plt.step(hours, p_DA_vec_two, where='post', label="Beta=1, All Scenarios", linewidth=2)
-plt.step(hours, p_DA_vec_comp, where='post', label="Beta=1, Fold 1", linewidth=2)
-plt.step(hours, p_DA_vec_comp2, where='post', label="Beta=1, Fold 2", linewidth=2)
-plt.xticks(hours)
-plt.xlim(0, 23)
-plt.xlabel("Hour")
-plt.ylabel("DA Offer (MW)")
-
-plt.title("Comparison of DA Offers for Beta=1 with Different In-Sample Scenarios")
-plt.legend()
-plt.grid(True)
-plt.show()
-
-
-
-
+p_da_list, profits, cvar = uf.compute_DA_offer_samples(n_runs=100)
+profits_day = profits.sum(axis=1)
+uf.plot_boxplot_profit_cvar(profits_day, cvar)
+uf.plot_scatter_profit_cvar(profits_day, cvar)
 
 
 
