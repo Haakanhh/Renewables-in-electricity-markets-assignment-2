@@ -35,18 +35,18 @@ q = epsilon*n_insample_profiles*60
 # Solve ALSO-X optimization problem
 m, c_up_AlsoX, y, F_up_AlsoX =uf.Optimal_reserve_bid_ALSO_X (in_sample_profiles, q, M=10**4, silent=False)
 
-print(c_up_AlsoX)
-#%%
+print(f"The optimal reserve bid (ALSO-X): {c_up_AlsoX}")
+
+# Plot histogram of violations per profile for ALSO-X
 uf.histogram_of_violations(c_up_AlsoX, F_up_AlsoX, title="Histogram of violations per profile - ALSO-X")
 
-#%%
-# Epsilon under P90 requirement
-epsilon = 0.1
 
+#%% Solve CVaR optimization problem
 m, c_up_CVaR, beta, zeta, F_up_CVaR = uf.Optimal_reserve_bid_CVaR (in_sample_profiles, epsilon, silent=False)
 
-print(c_up_CVaR)
+print(f"The optimal reserve bid (CVaR): {c_up_CVaR}")
 
+# Plot histogram of violations per profile for CVaR
 uf.histogram_of_violations(c_up_CVaR, F_up_CVaR, title="Histogram of violations per profile - CVaR")
 
 
@@ -94,6 +94,7 @@ mean_shortfall_CVaR = np.maximum(c_up_CVaR - out_sample_profiles, 0).mean()
 print(f"ALSO-X -> profiles with >6 violations: {n_profiles_with_violation_AlsoX}/{n_out_profiles}, share: {share_profiles_with_violation_AlsoX:.4%}")
 print(f"CVaR -> profiles with >6 violations: {n_profiles_with_violation_CVaR}/{n_out_profiles}, share: {share_profiles_with_violation_CVaR:.4%}")
 
+# Magnitude of shortfall (mean shortfall across all points)
 print(f"ALSO-X -> mean shortfall: {mean_shortfall_AlsoX:.4f} kW")
 print(f"CVaR -> mean shortfall: {mean_shortfall_CVaR:.4f} kW")
 
@@ -115,7 +116,7 @@ for epsilon in epsilon_values:
 	m, c_up_AlsoX, y, F_up_AlsoX = uf.Optimal_reserve_bid_ALSO_X(in_sample_profiles, q, M=10**4, silent=True)
 
 	alsox_results.append({"epsilon": epsilon, "q": q, "c_up_AlsoX": c_up_AlsoX})
-	print(f"epsilon={epsilon:.2f}, c_up_AlsoX={c_up_AlsoX}")
+	print(f"Epsilon:{epsilon:.2f}, Optimal reserve bid (ALSO-X): {c_up_AlsoX}")
 
 end_time = time.time()
 elapsed_time = end_time - start_time
@@ -130,12 +131,6 @@ alsox_results_df = pd.DataFrame(alsox_results)
 # Add reliability requirement (Pxx)
 alsox_results_df["Reliability requirement"] = alsox_results_df["epsilon"].apply(lambda e: f"P{int((1-e)*100)}")
 
-# Calculate share of unavailable points for each reliability requirement
-alsox_results_df["share_not_available"] = alsox_results_df["c_up_AlsoX"].apply(lambda c: (out_sample_profiles < c).sum() / n_points *100)
-
-uf.plot_Pxx_comparison(alsox_results_df)
-
-#%%
 
 alsox_results_df["mean_shortfall"] = alsox_results_df["c_up_AlsoX"].apply(
     lambda c: np.maximum(c - out_sample_profiles, 0).mean()
@@ -148,4 +143,11 @@ normalized_df = uf.compute_normalized_Pxx_metrics(alsox_results_df)
 
 # If you want to access values programmatically:
 print(normalized_df.head())
-# %%
+
+# %% Extra plot - optimal bid vs expected reserve shortfall
+
+# Calculate share of unavailable points for each reliability requirement
+alsox_results_df["share_not_available"] = alsox_results_df["c_up_AlsoX"].apply(lambda c: (out_sample_profiles < c).sum() / n_points *100)
+
+# The actual plot
+uf.plot_Pxx_comparison(alsox_results_df)
