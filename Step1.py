@@ -44,7 +44,7 @@ uf.plot_cumulative_profit_distribution(profit_per_scenario, title="Cumulative pr
 # Task 1.2) Offering Strategy Under a Two-Price Balancing Scheme
 # ------------------------
 
-# Use same 100 random scenarios as in Task 1.1
+# Use same 200 random scenarios as in Task 1.1
 # Solve optimization problem
 m_2, p_DA_2, Delta_up, Delta_down, profit_matrix_2 = uf.solve_stochastic_strategy_two_price(in_sample_scenarios)
 
@@ -79,7 +79,7 @@ print(f"Max profit: {max_profit:.2f} MDKK")
 folds = uf.create_folds(scenarios, n_in_sample=200, seed=rng) # Creates a list of arrays, each of shape (24, 200, 3)
 
 # One-price cross-validation
-in_sample_means_one, out_sample_means_one = uf.cross_validate_folds(folds, two_price=False)
+in_sample_means_one, out_sample_means_one = uf.cross_validate_folds(folds, two_price=False, silent=True)
 
 print(f"One-Price mean in-sample profit:  {np.mean(in_sample_means_one):.15f} MDKK")
 print(f"One-Price mean out-of-sample profit: {np.mean(out_sample_means_one):.15f} MDKK")
@@ -90,7 +90,7 @@ print(f"Std out-of-sample profit:{np.std(out_sample_means_one):.3f}")
 uf.plot_Cross_Validation_Profits(in_sample_means_one, out_sample_means_one, title="Cross-Validation mean profits - One-Price")
 
 # Two_Price cross-validation
-in_sample_means_two, out_sample_means_two = uf.cross_validate_folds(folds, two_price=True)
+in_sample_means_two, out_sample_means_two = uf.cross_validate_folds(folds, two_price=True, silent=True)
 
 print(f"Two-Price mean in-sample profit:  {np.mean(in_sample_means_two):.15f} MDKK")
 print(f"Two-Price mean out-of-sample profit: {np.mean(out_sample_means_two):.15f} MDKK")
@@ -123,29 +123,86 @@ for n_in in in_sample_list:
 
 beta_range = np.linspace(1e-6, 1, 20)
 
-exp_profit_one, cvar_list_one = uf.compute_profit_cvar_tradeoff(in_sample_scenarios, beta_range, scheme="one_price")
+exp_profit_one, cvar_list_one, p_DA_list_one = uf.compute_profit_cvar_tradeoff(in_sample_scenarios, beta_range, scheme="one_price")
 
 uf.plot_profit_cvar_tradeoff(cvar_list_one, exp_profit_one, beta_range, annotate=False)
 
+uf.plot_DA_offers_risk(beta_range, p_DA_list_one)
+
+
 # Two price
 
-exp_profit_two, cvar_list_two = uf.compute_profit_cvar_tradeoff(in_sample_scenarios, beta_range, scheme="two_price")
+exp_profit_two, cvar_list_two, p_DA_list_two = uf.compute_profit_cvar_tradeoff(in_sample_scenarios, beta_range, scheme="two_price")
 
 
 uf.plot_profit_cvar_tradeoff(cvar_list_two, exp_profit_two, beta_range)
 
+# Only take 5 values from beta range for plotting DA offers
+chosen_beta_two = [beta_range[0], beta_range[6], beta_range[13],beta_range[19]]
+chosen_DA_offers_two = [p_DA_list_two[i] for i in [0, 6, 13, 19]]
+uf.plot_DA_offers_risk(chosen_beta_two, chosen_DA_offers_two)
 
 
 
+#%% EXAMINING DA OFFERS IN RISK-AVERSION
+
+# Solve with beta = 1
+_, p_DA_vec_one, _, profit_matrix_one, cvar_one, eta_vec_one = uf.solve_risk_averse_one_price(in_sample_scenarios, alpha=0.9, beta=1)
+_, p_DA_vec_two, profit_matrix_two, cvar_two, eta_vec_two = uf.solve_risk_averse_two_price(in_sample_scenarios, alpha=0.9, beta=1)
+
+# Function that solves one-price with a fixed bid
+res_opt = uf.evaluate_fixed_bid_risk(in_sample_scenarios, p_DA_vec_one)
+
+# Solve with a slightly lower bid to see if worst scenarios change
+p_new = p_DA_vec_one.copy()
+p_new[5] += -1
+res_new = uf.evaluate_fixed_bid_risk(in_sample_scenarios, p_new)
+
+# 4. Compare results
+print(f"Optimal (43.586) CVaR: {res_opt['cvar']:.6f}")
+print(f"New Bid (42.586) CVaR: {res_new['cvar']:.6f}")
+print(f"\nWorst Scenarios at Optimal: {sorted(res_opt['worst_indices'])}")
+print(f"Worst Scenarios at New Bid: {sorted(res_new['worst_indices'])}")
+
+# Find which scenarios entered/left the tail
+new_entries = set(res_new['worst_indices']) - set(res_opt['worst_indices'])
+if new_entries:
+    print(f"Scenarios that became 'worst' due to higher bid: {new_entries}")
+
+# Check mean wind for worst-case scenario in 2-price case
+worst_idx= np.where(eta_vec_two > 1e-9)[0]
+average_wind_worst = in_sample_scenarios[:, worst_idx, 0].mean()
+average_wind_overall = in_sample_scenarios[:, :, 0].mean()
+print(f"\nAverage wind in worst-case scenarios: {average_wind_worst:.3f}")
+print(f"Average wind overall: {average_wind_overall:.3f}")
+
+
+#%% Change in profit distribution
+
+# Comparison one price
+profit_per_scenario_risk_1 = profit_matrix_one.sum(axis=0)
+print("Plot comparison of profit distributions for one-price strategy")
+print("Difference in total profit: ", round(profit_per_scenario.mean() - profit_per_scenario_risk_1.mean(),3), "MDKK")
+uf.plot_cdf_comparison_cvar(profit_per_scenario_risk_1, profit_per_scenario, label_a="Risk-averse", label_b="Risk-neutral", title=None)
+uf.plot_cdf_comparison_cvar(profit_per_scenario_risk_1, profit_per_scenario, label_a="Risk-averse", label_b="Risk-neutral", title=None, alpha=0)
+
+#Comparison two price
+profit_per_scenario_risk_2 = profit_matrix_two.sum(axis=0)
+print("Plot comparison of profit distributions for two-price strategy")
+print("Difference in total profit: ", round(profit_per_scenario_2.mean() - profit_per_scenario_risk_2.mean(),3), "MDKK")
+uf.plot_cdf_comparison_cvar(profit_per_scenario_risk_2, profit_per_scenario_2, label_a="Risk-averse", label_b="Risk-neutral", title=None)
+uf.plot_cdf_comparison_cvar(profit_per_scenario_risk_2, profit_per_scenario_2, label_a="Risk-averse", label_b="Risk-neutral", title=None, alpha=0)
 
 
 
+#%% EXAMINE VARIATION IN FOLD OR INPUT DATA
 
+uf.plot_DA_offer_folds(folds)
 
-
-
-
-
+p_da_list, profits, cvar = uf.compute_DA_offer_samples(n_runs=100)
+profits_day = profits.sum(axis=1)
+uf.plot_boxplot_profit_cvar(profits_day, cvar)
+uf.plot_scatter_profit_cvar(profits_day, cvar)
 
 
 
@@ -292,4 +349,3 @@ plt.legend(fontsize=legendsize)
 plt.grid(True, alpha=0.3)
 
 plt.show()
-# %%

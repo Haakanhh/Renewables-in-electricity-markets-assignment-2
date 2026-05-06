@@ -321,33 +321,94 @@ def plot_profit_distribution(profit_per_scenario, n_bins = 15, title="Profit dis
     plt.legend(fontsize=16)
     plt.show()
 
-def plot_cumulative_profit_distribution(profit_per_scenario, title="Cumulative profit distribution"):
+def plot_cumulative_profit_distribution(profit_per_scenario, title="Cumulative profit distribution", tail_fraction=1.0, mean=True
+):
+
     plt.figure(figsize=(12, 6))
 
-    # Exact empirical CDF (no binning)
+    # Sort profits
     sorted_profit = np.sort(np.asarray(profit_per_scenario))
     n = sorted_profit.size
-    cdf = np.arange(1, n + 1) / n
 
-    plt.step(sorted_profit, cdf, where="post", linewidth=2, label="Empirical CDF")
+    # --- Select lowest fraction
+    k = int(np.ceil(tail_fraction * n))
+    subset_profit = sorted_profit[:k]
 
-    mean_profit = sorted_profit.mean()
-    plt.axvline(
-        mean_profit,
-        color="red",
-        linestyle="dashed",
-        label=f"Mean: {mean_profit:.2f} MDKK"
-    )
+    # Recompute CDF on subset
+    cdf = np.arange(1, k + 1) / k
+    if tail_fraction < 1.0:
+        label = f"Lowest {tail_fraction*100:.0f}%"
+    else:
+        label = "Empirical CDF"
+
+    plt.step(subset_profit, cdf, where="post", linewidth=2,
+             label=label)
+
+    # Mean of full distribution (optional, usually more meaningful)
+    if mean:
+        mean_profit = sorted_profit.mean()
+        plt.axvline(
+            mean_profit,
+            color="red",
+            linestyle="dashed",
+            label=f"Mean (all): {mean_profit:.2f} MDKK"
+        )
 
     plt.title(title, fontsize=18)
     plt.xlabel("Total profit per scenario (MDKK)", fontsize=14)
-    plt.ylabel("Cumulative probability", fontsize=14)
+    plt.ylabel("Cumulative probability (subset)", fontsize=14)
     plt.xticks(fontsize=14)
     plt.yticks(fontsize=14)
     plt.ylim(0, 1.02)
     plt.grid(True, alpha=0.3)
     plt.legend(fontsize=14)
     plt.show()
+
+def plot_cdf_comparison_cvar(
+    profit_a,
+    profit_b,
+    label_a="Strategy A",
+    label_b="Strategy B",
+    title="CDF comparison (CVaR view)",
+    alpha=0.9
+):
+    import numpy as np
+    import matplotlib.pyplot as plt
+
+    plt.figure(figsize=(8, 6))
+
+    def prepare(profit):
+        sorted_profit = np.sort(np.asarray(profit))
+        n = len(sorted_profit)
+        cdf = np.arange(1, n + 1) / n
+        var = np.quantile(sorted_profit, 1-alpha)
+        return sorted_profit, cdf, var
+
+    # --- Prepare both strategies
+    x_a, cdf_a, var_a = prepare(profit_a)
+    x_b, cdf_b, var_b = prepare(profit_b)
+
+    # --- Plot full CDFs
+    plt.step(x_a, cdf_a, where="post", linewidth=2, label=label_a)
+    plt.step(x_b, cdf_b, where="post", linewidth=2, label=label_b)
+
+    # --- Only show tail
+    plt.ylim(0, 1-alpha+0.01)
+    plt.xlim(min(x_a.min(), x_b.min()), max(var_a, var_b))
+
+    # --- Labels
+    plt.title(title, fontsize=18)
+    plt.xlabel("Total profit per scenario (MDKK)", fontsize=14)
+    plt.ylabel("Cumulative probability", fontsize=14)
+
+    plt.xticks(fontsize=14)
+    plt.yticks(fontsize=14)
+
+    plt.grid(True, alpha=0.3)
+    plt.legend(fontsize=13)
+    plt.tight_layout()
+    plt.show()
+
 
 def scenario_profit_stats(profit_matrix):
     profit_per_scenario = profit_matrix.sum(axis=0)
@@ -571,7 +632,7 @@ def solve_risk_averse_one_price(in_sample_scenarios, alpha=0.9, beta=0, silent=F
     eta_vec = np.array([eta[s].X for s in range(n_scenarios)])
     cvar = zeta_val - (1/(1-alpha)) * prob_scenarios * eta_vec.sum()
 
-    return m, p_DA_vec, Delta, profit_matrix, cvar
+    return m, p_DA_vec, Delta, profit_matrix, cvar, eta_vec
 
 
 def solve_risk_averse_two_price(in_sample_scenarios, alpha=0.9, beta=0, silent=False):
@@ -648,7 +709,7 @@ def solve_risk_averse_two_price(in_sample_scenarios, alpha=0.9, beta=0, silent=F
     eta_vec  = np.array([eta[s].X for s in range(n_scenarios)])
     cvar = zeta_val - (1/(1-alpha)) * prob_scenarios * eta_vec.sum()
 
-    return m, p_DA_vec, profit_matrix, cvar
+    return m, p_DA_vec, profit_matrix, cvar, eta_vec
 
 
 def plot_profit_cvar_tradeoff(cvar_list, exp_profit, beta_range, annotate=True):
@@ -673,21 +734,279 @@ def plot_profit_cvar_tradeoff(cvar_list, exp_profit, beta_range, annotate=True):
 def compute_profit_cvar_tradeoff(in_sample_scenarios, beta_range, alpha=0.9, scheme="two_price"):
     exp_profit = []
     cvar_list = []
-
+    p_DA_all = []
+    
     for b in beta_range:
         if scheme == "two_price":
-            _, _, profit_matrix, cvar = solve_risk_averse_two_price(in_sample_scenarios, alpha=alpha, beta=b, silent=False)
+            _, p_DA_vec, profit_matrix, cvar, _ = solve_risk_averse_two_price(
+                in_sample_scenarios, alpha=alpha, beta=b, silent=False)
+
         elif scheme == "one_price":
-            _, _, _, profit_matrix, cvar = solve_risk_averse_one_price(in_sample_scenarios, alpha=alpha, beta=b, silent=False)
+            _, p_DA_vec, _, profit_matrix, cvar, _ = solve_risk_averse_one_price(
+                in_sample_scenarios, alpha=alpha, beta=b, silent=False)
 
         profit_per_scenario = profit_matrix.sum(axis=0)
         expected_profit = profit_per_scenario.mean()
+
         exp_profit.append(expected_profit)
         cvar_list.append(cvar)
+        p_DA_all.append(p_DA_vec)
+
         print(f"beta={b:.2f}: E[profit]={expected_profit:.3f}, CVaR={cvar:.3f}")
 
-    return exp_profit, cvar_list
+    return exp_profit, cvar_list, p_DA_all
 
+
+def plot_DA_offers_risk(beta_range, p_DA_list, tol=1e-6):
+    import numpy as np
+    import matplotlib.pyplot as plt
+
+    hours = np.arange(24)
+    plt.figure(figsize=(8, 6))
+
+    # --- Group identical full-day strategies
+    unique_strategies = []
+    group_indices = []
+
+    for i, p in enumerate(p_DA_list):
+        found = False
+        for j, ref in enumerate(unique_strategies):
+            if np.allclose(p, ref, atol=tol):
+                group_indices[j].append(i)
+                found = True
+                break
+        if not found:
+            unique_strategies.append(p)
+            group_indices.append([i])
+
+    # --- Assign colors per unique strategy
+    cmap = plt.cm.get_cmap("tab10", len(unique_strategies))
+    distinct_colors = ["tab:blue", "tab:orange", "tab:green", "tab:red", "tab:purple"]
+
+    for g_idx, indices in enumerate(group_indices):
+        color = distinct_colors[g_idx % len(distinct_colors)]
+        
+        for k, i in enumerate(indices):
+            b = beta_range[i]
+
+
+            if len(indices) > 1:
+                label = f"β ∈ [{beta_range[indices[0]]:.2f}, {beta_range[indices[-1]]:.2f}]" if k == 0 else None
+            else:
+                label = f"β={b:.2f}" if k == 0 else None
+
+            plt.step(
+                hours,
+                p_DA_list[i],
+                where="post",
+                #marker="o",
+                linewidth=2 + 1*len(indices),
+                alpha=0.7,
+                color=color,
+                # Only label once per group
+                label=label
+            )
+
+    # --- Styling (match your original)
+    plt.xlabel("Hour", fontsize=16)
+    plt.ylabel("DA Offer (MW)", fontsize=16)
+    #plt.title("Day-ahead offers for different β", fontsize=)
+
+    plt.xticks(np.arange(24), fontsize=12)
+    plt.yticks(fontsize=12)
+    plt.xlim(0, 23)
+    plt.ylim(0, 550)
+
+    plt.grid(True, alpha=0.3)
+    plt.legend(ncol=1, fontsize=16)
+
+    plt.tight_layout()
+    plt.show()
+
+
+# %%
+import numpy as np
+
+def evaluate_fixed_bid_risk(in_sample_scenarios, p_DA_input, alpha=0.9):
+    """
+    Calculates profit and identifies worst scenarios for a FIXED p_DA vector.
+    """
+    n_hours, n_scenarios, _ = in_sample_scenarios.shape
+    p_real = in_sample_scenarios[:, :, 0]
+    lambda_DA = in_sample_scenarios[:, :, 1]
+    deficit_bin = in_sample_scenarios[:, :, 2]
+    
+    # One-price balancing logic
+    lambda_bal = 1.25 * lambda_DA * deficit_bin + 0.85 * lambda_DA * (1 - deficit_bin)
+    
+    # Calculate profit matrix and daily totals
+    # p_DA_input[:, None] broadcasts the 24h bids across all scenarios
+    profit_matrix = (lambda_DA * p_DA_input[:, None]) + (lambda_bal * (p_real - p_DA_input[:, None]))
+    daily_profits = np.sum(profit_matrix, axis=0)
+    
+    # Identify the Tail (Worst Scenarios)
+    # CVaR is the mean of the worst (1-alpha) fraction of scenarios
+    n_tail = int(np.ceil(n_scenarios * (1 - alpha)))
+    sorted_indices = np.argsort(daily_profits)
+    worst_indices = sorted_indices[:n_tail]
+    
+    # Calculate VaR (the profit of the best scenario in the worst group)
+    zeta_val = daily_profits[sorted_indices[n_tail - 1]]
+    
+    # Calculate CVaR
+    cvar_val = np.mean(daily_profits[worst_indices])
+    
+    # Calculate eta (how much each scenario falls below VaR)
+    # Matches Gurobi: eta[s] = max(0, zeta - daily_profit[s])
+    eta_vec = np.maximum(0, zeta_val - daily_profits)
+    
+    return {
+        "cvar": cvar_val,
+        "zeta": zeta_val,
+        "worst_indices": worst_indices,
+        "daily_profits": daily_profits,
+        "eta_vec": eta_vec
+    }
+
+
+# %%
+def compute_DA_offer_samples(
+    n_runs=50,
+    n_in_sample=200,
+    alpha=0.9,
+    beta=1,
+    n_wind=20,
+    n_price=20,
+    n_surp_def=4,
+    seed=42
+):
+    rng_master = np.random.default_rng(seed)
+    p_DA_list = []
+    profit_list = []
+    cvar_list = []
+
+    for run in range(n_runs):
+        rng = np.random.default_rng(rng_master.integers(0, 1e9))
+
+        # Generate scenarios
+        scenarios = generate_scenarios(
+            random_state=rng,
+            n_wind=n_wind,
+            n_price=n_price,
+            n_surp_def=n_surp_def
+        )
+
+        # Sample in-sample set
+        idx = rng.choice(scenarios.shape[1], size=n_in_sample, replace=False)
+        in_sample = scenarios[:, idx, :]
+
+        # Solve
+        _, p_DA, profit, cvar, _ = solve_risk_averse_two_price(
+            in_sample, alpha=alpha, beta=beta, silent=True
+        )
+
+        p_DA_list.append(p_DA)
+        profit_list.append(profit)
+        cvar_list.append(cvar)
+
+        # Progress print every 10 runs
+        if (run + 1) % 10 == 0 or run == 0:
+            print(f"Computed {run + 1}/{n_runs} DA offers")
+
+    return np.array(p_DA_list), np.array(profit_list).mean(axis=2), np.array(cvar_list)
+
+def plot_DA_offer_folds(folds):
+    
+    hours = np.arange(24)
+
+    plt.figure(figsize=(8, 6))
+    # Loop over all folds
+    import itertools
+
+    linestyles = itertools.cycle(['-', '--', '-.', ':'])
+
+    for i, fold in enumerate(folds):
+        _, p_DA_vec_fold, _, _, _ = solve_risk_averse_two_price(
+            fold, alpha=0.9, beta=1, silent=True
+        )
+
+        plt.step(
+            hours,
+            p_DA_vec_fold,
+            where='post',
+            linestyle=next(linestyles),
+            label=f"Fold {i+1}",
+            linewidth=2.5,
+            alpha=0.8
+        )
+
+    plt.xticks(hours)
+    plt.xlim(0, 23)
+    plt.xlabel("Hour", fontsize=16)
+    plt.ylabel("DA Offer (MW)", fontsize=16)
+    plt.title("DA Offers for Beta=1 Across All Folds", fontsize=20)
+    plt.legend(fontsize=14)
+    plt.xticks(fontsize=12)
+    plt.yticks(fontsize=12)
+    plt.grid(True)
+    plt.show()
+
+
+
+def plot_scatter_profit_cvar(profit_list, cvar_list):
+    plt.figure(figsize=(7, 6))
+
+    coef = np.polyfit(cvar_list, profit_list, 1)
+    slope, intercept = coef
+
+    x = np.linspace(0, max(cvar_list), 100)
+    y = slope * x + intercept
+
+    y_pred = slope * np.array(cvar_list) + intercept
+    ss_res = np.sum((np.array(profit_list) - y_pred)**2)
+    ss_tot = np.sum((np.array(profit_list) - np.mean(profit_list))**2)
+    r2 = 1 - ss_res / ss_tot
+
+
+    plt.scatter(cvar_list, profit_list, alpha=0.7)
+    plt.plot(x, y, color='red', label=f"Fit: y = {slope:.2f}x + {intercept:.2f}\n$R^2$ = {r2:.3f}")
+    plt.xlabel("CVaR")
+    plt.ylabel("Expected Profit")
+    plt.title("CVaR vs Expected Profit (In-sample across seeds)")
+
+    plt.grid(True, alpha=0.3)
+    plt.legend()
+
+    plt.xlim(left=0)
+    plt.ylim(bottom=min(profit_list)-1)
+    plt.show()
+
+def plot_boxplot_profit_cvar(profit_list, cvar_list):
+    plt.figure(figsize=(8, 6))
+
+    data = [profit_list, cvar_list]
+
+    box = plt.boxplot(
+        data,
+        patch_artist=True,   # allows coloring
+        labels=["Expected Profit", "CVaR"]
+    )
+
+    # Add colors
+    colors = ["skyblue", "salmon"]
+    for patch, color in zip(box['boxes'], colors):
+        patch.set_facecolor(color)
+
+    # Optional styling tweaks
+    for median in box['medians']:
+        median.set_color('black')
+        median.set_linewidth(2)
+
+    plt.ylabel("MDKK")
+    plt.title("In-sample Profit vs CVaR Across Scenario Seeds")
+    plt.grid(axis='y', alpha=0.3)
+
+    plt.show()
 
 
 
@@ -954,3 +1273,46 @@ def plot_Pxx_comparison_mean(alsox_results_df, title="Reliability requirement co
     ax1.set_title(title)
     fig.tight_layout()
     plt.show()
+
+def compute_normalized_Pxx_metrics(alsox_results_df, p_min=80, p_max=100, verbose=True):
+    df = alsox_results_df.copy()
+
+    # Extract numeric Pxx
+    df["P_value"] = df["Reliability requirement"].str.extract(r'(\d+)').astype(int)
+
+    # Sort properly (P100 → P80)
+    df = df.sort_values("P_value", ascending=False).reset_index(drop=True)
+
+    # --- Anchor values ---
+    c_up_Pmin = df.loc[df["P_value"] == p_min, "c_up_AlsoX"].values[0]
+    c_up_Pmax = df.loc[df["P_value"] == p_max, "c_up_AlsoX"].values[0]
+
+    shortfall_Pmin = df.loc[df["P_value"] == p_min, "mean_shortfall"].values[0]
+    shortfall_Pmax = df.loc[df["P_value"] == p_max, "mean_shortfall"].values[0]
+
+    # --- Normalize ---
+    df["c_up_pct"] = (
+        (df["c_up_AlsoX"] - c_up_Pmax) / (c_up_Pmin - c_up_Pmax)
+    ) * 100
+
+    df["shortfall_pct"] = (
+        (df["mean_shortfall"] - shortfall_Pmax) / (shortfall_Pmin - shortfall_Pmax)
+    ) * 100
+
+    # --- Difference ---
+    df["difference_pct_points"] = df["c_up_pct"] - df["shortfall_pct"]
+
+    # --- Filter range ---
+    df_filtered = df[(df["P_value"] >= p_min) & (df["P_value"] <= p_max)].copy()
+
+    result = df_filtered[[
+        "Reliability requirement",
+        "c_up_pct",
+        "shortfall_pct",
+        "difference_pct_points"
+    ]]
+
+    if verbose:
+        print(result.to_string(index=False, float_format="%.2f"))
+
+    return result
