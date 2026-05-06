@@ -94,8 +94,14 @@ n_profiles_with_violation_CVaR = int(profiles_with_violation_CVaR.sum())
 share_profiles_with_violation_AlsoX = n_profiles_with_violation_AlsoX / n_out_profiles
 share_profiles_with_violation_CVaR = n_profiles_with_violation_CVaR / n_out_profiles
 
+mean_shortfall_AlsoX = np.maximum(c_up_AlsoX - out_sample_profiles, 0).mean()
+mean_shortfall_CVaR = np.maximum(c_up_CVaR - out_sample_profiles, 0).mean()
+
 print(f"ALSO-X -> profiles with >6 violations: {n_profiles_with_violation_AlsoX}/{n_out_profiles}, share: {share_profiles_with_violation_AlsoX:.4%}")
 print(f"CVaR -> profiles with >6 violations: {n_profiles_with_violation_CVaR}/{n_out_profiles}, share: {share_profiles_with_violation_CVaR:.4%}")
+
+print(f"ALSO-X -> mean shortfall: {mean_shortfall_AlsoX:.4f} kW")
+print(f"CVaR -> mean shortfall: {mean_shortfall_CVaR:.4f} kW")
 
 #%% ----------------------
 # Task 2.3) Energinet Perspective
