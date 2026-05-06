@@ -739,7 +739,7 @@ def Load_profile_generation(random_state=None, Profiles=300, P_max=600, P_min=22
     return profiles
 
 
-def Optimal_reserve_bid_ALSO_X (in_sample_profiles, q, M=None, silent=False):
+def Optimal_reserve_bid_ALSO_X (in_sample_profiles, q, M=10**4, silent=False):
 
 
     m = gp.Model("Optimal_reserve_bid_ALSO-X")
@@ -750,9 +750,6 @@ def Optimal_reserve_bid_ALSO_X (in_sample_profiles, q, M=None, silent=False):
     n_minutes = in_sample_profiles.shape[1]
     F_up = (in_sample_profiles).T # F_up[m, w] = available upward reserve from load reduction
     
-    # Big-M: enough to relax c_up <= F_up when y=1
-    if M is None:
-        M = float(np.max(F_up)) if F_up.size > 0 else 0.0
 
     model = gp.Model("Optimal_reserve_bid_ALSO_X")
     if silent:
