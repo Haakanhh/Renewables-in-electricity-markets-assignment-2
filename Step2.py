@@ -13,6 +13,12 @@ rng = np.random.default_rng(seed)
 
 # Generate scenarios
 Load_profiles = uf.Load_profile_generation(random_state=seed, Profiles=300, P_max=600, P_min=220, P_delta=35)
+plt.figure()
+plt.hist(Load_profiles.flatten(), bins=50)
+plt.xlabel("Load")
+plt.ylabel("Frequency")
+plt.title("Distribution of all load values")
+plt.show()
 
 #%% ----------------------
 # Task 2.1) In-sample Decision Making: Offering Strategy Under the P90 Requirement

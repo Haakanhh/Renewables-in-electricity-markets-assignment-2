@@ -1010,7 +1010,7 @@ def plot_boxplot_profit_cvar(profit_list, cvar_list):
 
 
 
-def Load_profile_generation(random_state=None, Profiles=300, P_max=600, P_min=220, P_delta=35):
+def Load_profile_generation(random_state=None, Profiles=300, P_max=600, P_min=220, P_delta=35, plot=False):
     """
     Generate random load profiles for a single hour at minute-level resolution.
     
@@ -1049,12 +1049,28 @@ def Load_profile_generation(random_state=None, Profiles=300, P_max=600, P_min=22
         for minute in range(1, n_minutes):
             # Generate random change limited by P_delta
             delta = rng.uniform(-P_delta, P_delta)
-            
+
+            if current_power <= P_min + 1e-6:
+                delta = rng.uniform(0, P_delta)
+
+            elif current_power >= P_max - 1e-6:
+                delta = rng.uniform(-P_delta, 0)
+
             # Apply change and clip to stay within bounds
             next_power = np.clip(current_power + delta, P_min, P_max)
             profiles[i, minute] = next_power
             current_power = next_power
     
+    if plot:
+        plt.figure(figsize=(8,6))
+        plt.hist(profiles.flatten(), bins=50)
+        plt.xlabel("Load", fontsize=16)
+        plt.ylabel("Frequency", fontsize=16)
+        #plt.title("Distribution of all load values")
+        plt.xticks(fontsize=12)
+        plt.yticks(fontsize=12)
+        plt.show()
+
     return profiles
 
 
