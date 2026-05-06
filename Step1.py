@@ -30,14 +30,16 @@ print("Expected Profit (One-Price):", round(m.ObjVal, 3), "MDKK")
 print("Day-Ahead offers:", p_DA)
 
 # Plot day-ahead offers
-uf.plot_DA_offers(p_DA, in_sample_scenarios, title="Day-ahead offers - One-Price", Threshold_value=0.375)
+#uf.plot_DA_offers(p_DA, in_sample_scenarios, title="Day-ahead offers - One-Price", Threshold_value=0.375)
+uf.plot_DA_offers(p_DA, in_sample_scenarios, title=None, Threshold_value=0.375)
 
 # Plot profit distribution per scenario
 profit_per_hour = profit_matrix.mean(axis=1)
 profit_per_scenario = profit_matrix.sum(axis=0)
 uf.plot_profit_distribution(profit_per_scenario, n_bins = 30, title="Profit distribution per scenario in one-price system")
 
-uf.plot_cumulative_profit_distribution(profit_per_scenario, title="Cumulative profit distribution - One-price")
+#uf.plot_cumulative_profit_distribution(profit_per_scenario, title="Cumulative profit distribution - One-price")
+uf.plot_cumulative_profit_distribution(profit_per_scenario, title=None)
 
 
 #%% ----------------------
@@ -59,10 +61,19 @@ uf.plot_DA_offers(p_DA_2, in_sample_scenarios, title="Day-ahead offers - Two-Pri
 profit_per_hour_2 = profit_matrix_2.mean(axis=1)
 profit_per_scenario_2 = profit_matrix_2.sum(axis=0)
 uf.plot_profit_distribution(profit_per_scenario_2, n_bins = 30, title="Profit distribution per scenario in two-price system")
-uf.plot_cumulative_profit_distribution(profit_per_scenario_2, title="Cumulative profit distribution - Two-price")
+
+
+#uf.plot_cumulative_profit_distribution(profit_per_scenario_2, title="Cumulative profit distribution - Two-price")
+#uf.plot_cumulative_profit_distribution(profit_per_scenario_2, title=None)
+
+uf.plot_cdf_comparison(profit_per_scenario_2, profit_per_scenario, label_a="Two-price", label_b="One-price", title=None, alpha=0, ls_second=":", mean=True)
+
 
 # Profit comparison plot
 uf.plot_profit_distribution_comparison(profit_per_scenario, profit_per_scenario_2, n_bins=30)
+
+
+
 
 #%% 
 importlib.reload(uf)
@@ -183,15 +194,15 @@ print(f"Average wind overall: {average_wind_overall:.3f}")
 profit_per_scenario_risk_1 = profit_matrix_one.sum(axis=0)
 print("Plot comparison of profit distributions for one-price strategy")
 print("Difference in total profit: ", round(profit_per_scenario.mean() - profit_per_scenario_risk_1.mean(),3), "MDKK")
-uf.plot_cdf_comparison_cvar(profit_per_scenario_risk_1, profit_per_scenario, label_a="Risk-averse", label_b="Risk-neutral", title=None)
-uf.plot_cdf_comparison_cvar(profit_per_scenario_risk_1, profit_per_scenario, label_a="Risk-averse", label_b="Risk-neutral", title=None, alpha=0)
+uf.plot_cdf_comparison(profit_per_scenario_risk_1, profit_per_scenario, label_a="Risk-averse", label_b="Risk-neutral", title=None)
+uf.plot_cdf_comparison(profit_per_scenario_risk_1, profit_per_scenario, label_a="Risk-averse", label_b="Risk-neutral", title=None, alpha=0)
 
 #Comparison two price
 profit_per_scenario_risk_2 = profit_matrix_two.sum(axis=0)
 print("Plot comparison of profit distributions for two-price strategy")
 print("Difference in total profit: ", round(profit_per_scenario_2.mean() - profit_per_scenario_risk_2.mean(),3), "MDKK")
-uf.plot_cdf_comparison_cvar(profit_per_scenario_risk_2, profit_per_scenario_2, label_a="Risk-averse", label_b="Risk-neutral", title=None)
-uf.plot_cdf_comparison_cvar(profit_per_scenario_risk_2, profit_per_scenario_2, label_a="Risk-averse", label_b="Risk-neutral", title=None, alpha=0)
+uf.plot_cdf_comparison(profit_per_scenario_risk_2, profit_per_scenario_2, label_a="Risk-averse", label_b="Risk-neutral", title=None)
+uf.plot_cdf_comparison(profit_per_scenario_risk_2, profit_per_scenario_2, label_a="Risk-averse", label_b="Risk-neutral", title=None, alpha=0)
 
 
 
@@ -199,10 +210,12 @@ uf.plot_cdf_comparison_cvar(profit_per_scenario_risk_2, profit_per_scenario_2, l
 
 uf.plot_DA_offer_folds(folds)
 
+#%%
+
 p_da_list, profits, cvar = uf.compute_DA_offer_samples(n_runs=100)
 profits_day = profits.sum(axis=1)
-uf.plot_boxplot_profit_cvar(profits_day, cvar)
-uf.plot_scatter_profit_cvar(profits_day, cvar)
+uf.plot_boxplot_profit_cvar(profits_day, cvar, profit_per_scenario_2.mean(), cvar_two)
+uf.plot_scatter_profit_cvar(profits_day, cvar, profit_per_scenario_2.mean(), cvar_two)
 
 
 
