@@ -1080,48 +1080,55 @@ def Optimal_reserve_bid_ALSO_X (in_sample_profiles, q, M=10**4, silent=False):
     m = gp.Model("Optimal_reserve_bid_ALSO-X")
     m.Params.OutputFlag = 0
 
+    
+
     # Parameters
     n_profiles = in_sample_profiles.shape[0]
     n_minutes = in_sample_profiles.shape[1]
     F_up = (in_sample_profiles).T # F_up[m, w] = available upward reserve from load reduction
-    
-
-    model = gp.Model("Optimal_reserve_bid_ALSO_X")
-    if silent:
-        model.Params.OutputFlag = 0
+      
 
    # Variables
-    c_up = model.addVar(lb=0.0, name="c_up")
-    y = model.addVars(n_minutes, n_profiles, vtype=gp.GRB.BINARY, name="y")
+    c_up = m.addVar(lb=0.0, name="c_up")
+    y = m.addVars(n_minutes, n_profiles, vtype=gp.GRB.BINARY, name="y")
 
 
     # Objective
-    model.setObjective(c_up, gp.GRB.MAXIMIZE)
+    m.setObjective(c_up, gp.GRB.MAXIMIZE)
 
 
     # ALSO-X constraints
-    for m in range(n_minutes):
+    for min in range(n_minutes):
         for w in range(n_profiles):
-            model.addConstr(c_up - F_up[m, w] <= M * y[m, w], name=f"alsox_{m}_{w}")
+            m.addConstr(c_up - F_up[min, w] <= M * y[min, w], name=f"alsox_{min}_{w}")
 
-    model.addConstr(
-        gp.quicksum(y[m, w] for m in range(n_minutes) for w in range(n_profiles)) <= q,
+    m.addConstr(
+        gp.quicksum(y[min, w] for min in range(n_minutes) for w in range(n_profiles)) <= q,
         name="violation_budget"
     )
 
-    model.optimize()
+    m.optimize()
 
-    c_up_value = c_up.X if model.Status == gp.GRB.OPTIMAL else np.nan
-    y_value = np.array([[y[m, w].X for w in range(n_profiles)] for m in range(n_minutes)])
+    if silent == False:
+        # Print computational details
+        runtime_sec    = m.Runtime
+        num_vars       = int(m.NumVars)
+        num_constrs    = int(m.NumConstrs)
+        print(f"  Computational time:    {runtime_sec:.6f} s")
+        print(f"  Decision variables:    {num_vars}")
+        print(f"  Constraints:           {num_constrs}")
 
-    return model, c_up_value, y_value, F_up
+
+    c_up_value = c_up.X if m.Status == gp.GRB.OPTIMAL else np.nan
+    y_value = np.array([[y[min, w].X for w in range(n_profiles)] for min in range(n_minutes)])
+
+    return m, c_up_value, y_value, F_up
 
 
 def Optimal_reserve_bid_CVaR (in_sample_profiles, epsilon, silent=False):
 
     model = gp.Model("Optimal_reserve_bid_CVaR")
-    if silent:
-        model.Params.OutputFlag = 0
+    model.Params.OutputFlag = 0
 
     # Parameters
     n_profiles = in_sample_profiles.shape[0]
@@ -1161,6 +1168,16 @@ def Optimal_reserve_bid_CVaR (in_sample_profiles, epsilon, silent=False):
             model.addConstr(beta <= zeta[m, w], name=f"beta_lb_{m}_{w}")
 
     model.optimize()
+
+    if silent == False:
+        # Print computational details
+        runtime_sec    = model.Runtime
+        num_vars       = int(model.NumVars)
+        num_constrs    = int(model.NumConstrs)
+        print(f"  Computational time:    {runtime_sec:.6f} s")
+        print(f"  Decision variables:    {num_vars}")
+        print(f"  Constraints:           {num_constrs}")
+
 
     c_up_value = c_up.X if model.Status == gp.GRB.OPTIMAL else np.nan
     beta_value = beta.X if model.Status == gp.GRB.OPTIMAL else np.nan
