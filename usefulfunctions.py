@@ -296,7 +296,7 @@ def plot_DA_offers(p_DA, in_sample_scenarios, title="Day-ahead offers", Threshol
     ax2.set_xlabel("Hour", fontsize=12)
     ax2.set_ylabel("Deficit probability", fontsize=12)
     ax2.set_xticks(np.arange(24))
-    ax2.set_xlim(0, 23)
+    ax2.set_xlim(0, 23.1)
     ax2.set_ylim(0, 1.05)
     if Threshold_value is not None:
         ax2.axhline(Threshold_value, color="black", linestyle="--", linewidth=1, label=f"P_deficit = {Threshold_value}")
@@ -434,12 +434,6 @@ def plot_cdf_comparison(
     plt.show()
 
 
-def scenario_profit_stats(profit_matrix):
-    profit_per_scenario = profit_matrix.sum(axis=0)
-    return profit_per_scenario.min(), profit_per_scenario.max()
-
-
-
 def plot_profit_distribution_comparison(profit_per_scenario, profit_per_scenario_2, n_bins=15):
 
     all_profits = np.concatenate([profit_per_scenario, profit_per_scenario_2])
@@ -478,7 +472,7 @@ def create_folds(scenarios, n_in_sample, seed=42):
 
     return folds
 
-def cross_validate_folds(folds, two_price=False, silent=False):
+def cross_validate_folds(folds, two_price=False, silent=True):
 
     in_sample_means = []
     out_sample_means = []
@@ -496,9 +490,9 @@ def cross_validate_folds(folds, two_price=False, silent=False):
 
         # solve model
         if two_price:
-            _, p_DA_vec, _, _, profit_matrix_fold = solve_stochastic_strategy_two_price(fold, silent=True)
+            _, p_DA_vec, _, _, profit_matrix_fold = solve_stochastic_strategy_two_price(fold, silent=silent)
         else:
-            _, p_DA_vec, _, profit_matrix_fold = solve_stochastic_strategy_one_price(fold, silent=True)
+            _, p_DA_vec, _, profit_matrix_fold = solve_stochastic_strategy_one_price(fold, silent=silent)
 
         # in-sample evaluation
         in_sample_profit = profit_matrix_fold.sum(axis=0)
@@ -581,12 +575,13 @@ def plot_Cross_Validation_Profits(in_sample_means, out_sample_means, title="Expe
     plt.axhline(in_mean, linestyle="--", linewidth=1.5, color="tab:blue", label=f"Avg in-sample: {in_mean:.3f}")
     plt.axhline(out_mean, linestyle="--", linewidth=1.5, color="tab:orange", label=f"Avg out-of-sample: {out_mean:.3f}")
     plt.title(title, fontsize=18)
-    plt.xlabel("Fold", fontsize=14)
-    plt.ylabel("Mean profit (MDKK)", fontsize=14)
-    plt.xticks(x, folds)
+    plt.xlabel("Fold", fontsize=16)
+    plt.ylabel("Mean profit (MDKK)", fontsize=16)
+    plt.xticks(x, folds, fontsize=12)
+    plt.yticks(fontsize=12)
     plt.ylim(bottom=0)
     plt.grid(True, alpha=0.3)
-    plt.legend(fontsize=14)
+    plt.legend(fontsize=16)
     plt.show()
 
 def solve_risk_averse_one_price(in_sample_scenarios, alpha=0.9, beta=0, silent=False):

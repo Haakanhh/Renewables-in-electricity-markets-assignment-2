@@ -24,18 +24,19 @@ in_sample_scenarios = scenarios[:, idx, :]
 
 # Solve optimization problem
 m, p_DA, Delta, profit_matrix = uf.solve_stochastic_strategy_one_price(in_sample_scenarios)
+profit_per_hour = profit_matrix.mean(axis=1)
+profit_per_scenario = profit_matrix.sum(axis=0)
 
 # Print expected profit and day-ahead offers
 print("Expected Profit (One-Price):", round(m.ObjVal, 3), "MDKK")
-print("Day-Ahead offers:", p_DA)
+print(f"Min profit (One-price): {profit_per_scenario.min():.2f} MDKK")
+print(f"Max profit (One-price): {profit_per_scenario.max():.2f} MDKK")
 
 # Plot day-ahead offers
 #uf.plot_DA_offers(p_DA, in_sample_scenarios, title="Day-ahead offers - One-Price", Threshold_value=0.375)
 uf.plot_DA_offers(p_DA, in_sample_scenarios, title=None, Threshold_value=0.375)
 
 # Plot profit distribution per scenario
-profit_per_hour = profit_matrix.mean(axis=1)
-profit_per_scenario = profit_matrix.sum(axis=0)
 uf.plot_profit_distribution(profit_per_scenario, n_bins = 30, title="Profit distribution per scenario in one-price system")
 
 #uf.plot_cumulative_profit_distribution(profit_per_scenario, title="Cumulative profit distribution - One-price")
@@ -49,17 +50,19 @@ uf.plot_cumulative_profit_distribution(profit_per_scenario, title=None)
 # Use same 200 random scenarios as in Task 1.1
 # Solve optimization problem
 m_2, p_DA_2, Delta_up, Delta_down, profit_matrix_2 = uf.solve_stochastic_strategy_two_price(in_sample_scenarios)
+profit_per_hour_2 = profit_matrix_2.mean(axis=1)
+profit_per_scenario_2 = profit_matrix_2.sum(axis=0)
 
 # Print expected profit and day-ahead offers
 print("Expected Profit (Two-Price):", round(m_2.ObjVal,3), "MDKK")
-print("Day-Ahead offers:", p_DA_2)
+print(f"Min profit (Two-price): {profit_per_scenario_2.min():.2f} MDKK")
+print(f"Max profit (Two-price): {profit_per_scenario_2.max():.2f} MDKK")
 
 # Plot day-ahead offers
 uf.plot_DA_offers(p_DA_2, in_sample_scenarios, title="Day-ahead offers - Two-Price")
 
 # Plot profit distribution per scenario
-profit_per_hour_2 = profit_matrix_2.mean(axis=1)
-profit_per_scenario_2 = profit_matrix_2.sum(axis=0)
+
 uf.plot_profit_distribution(profit_per_scenario_2, n_bins = 30, title="Profit distribution per scenario in two-price system")
 
 
@@ -68,20 +71,8 @@ uf.plot_profit_distribution(profit_per_scenario_2, n_bins = 30, title="Profit di
 
 uf.plot_cdf_comparison(profit_per_scenario_2, profit_per_scenario, label_a="Two-price", label_b="One-price", title=None, alpha=0, ls_second=":", mean=True)
 
-
 # Profit comparison plot
 uf.plot_profit_distribution_comparison(profit_per_scenario, profit_per_scenario_2, n_bins=30)
-
-
-
-
-#%% 
-importlib.reload(uf)
-m_2, p_DA_2, Delta_up, Delta_down, profit_matrix_2 = uf.solve_stochastic_strategy_two_price(in_sample_scenarios)
-min_profit, max_profit = uf.scenario_profit_stats(profit_matrix_2)
-
-print(f"Min profit: {min_profit:.2f} MDKK")
-print(f"Max profit: {max_profit:.2f} MDKK")
 
 #%% -----------------------
 # Task 1.3) Cross-Validation of Offering Strategies
@@ -90,26 +81,28 @@ print(f"Max profit: {max_profit:.2f} MDKK")
 folds = uf.create_folds(scenarios, n_in_sample=200, seed=rng) # Creates a list of arrays, each of shape (24, 200, 3)
 
 # One-price cross-validation
-in_sample_means_one, out_sample_means_one = uf.cross_validate_folds(folds, two_price=False, silent=True)
+in_sample_means_one, out_sample_means_one = uf.cross_validate_folds(folds, two_price=False)
 
 print(f"One-Price mean in-sample profit:  {np.mean(in_sample_means_one):.15f} MDKK")
 print(f"One-Price mean out-of-sample profit: {np.mean(out_sample_means_one):.15f} MDKK")
-
 print(f"Std in-sample profit:   {np.std(in_sample_means_one):.3f}")
 print(f"Std out-of-sample profit:{np.std(out_sample_means_one):.3f}")
 
-uf.plot_Cross_Validation_Profits(in_sample_means_one, out_sample_means_one, title="Cross-Validation mean profits - One-Price")
+# Bar chart with profits under one-price
+#uf.plot_Cross_Validation_Profits(in_sample_means_one, out_sample_means_one, title="Cross-Validation mean profits - One-Price")
+uf.plot_Cross_Validation_Profits(in_sample_means_one, out_sample_means_one, title=None)
+
 
 # Two_Price cross-validation
-in_sample_means_two, out_sample_means_two = uf.cross_validate_folds(folds, two_price=True, silent=True)
+in_sample_means_two, out_sample_means_two = uf.cross_validate_folds(folds, two_price=True)
 
 print(f"Two-Price mean in-sample profit:  {np.mean(in_sample_means_two):.15f} MDKK")
 print(f"Two-Price mean out-of-sample profit: {np.mean(out_sample_means_two):.15f} MDKK")
-
 print(f"Std in-sample profit:   {np.std(in_sample_means_two):.3f}")
 print(f"Std out-of-sample profit:{np.std(out_sample_means_two):.3f}")
 
-uf.plot_Cross_Validation_Profits(in_sample_means_two, out_sample_means_two, title="Cross-Validation mean profits - Two-Price")
+# Bar chart with profits under one-price
+uf.plot_Cross_Validation_Profits(in_sample_means_two, out_sample_means_two, title=None)
 
 
 # Results with varying in-sample size
@@ -117,8 +110,8 @@ in_sample_list = [50, 100, 200, 400, 800]
 
 for n_in in in_sample_list:
     folds_check = uf.create_folds(scenarios, n_in_sample=n_in, seed=rng)
-    in_means_one, out_means_one = uf.cross_validate_folds(folds_check, two_price=False, silent=True)
-    in_means_two, out_means_two = uf.cross_validate_folds(folds_check, two_price=True, silent=True)
+    in_means_one, out_means_one = uf.cross_validate_folds(folds_check, two_price=False)
+    in_means_two, out_means_two = uf.cross_validate_folds(folds_check, two_price=True)
 
     print(f"In-sample size: {n_in}")
     print(f"One-Price mean in-sample profit:  {np.mean(in_means_one):.15f} +- {np.std(in_means_one):.3f} MDKK")
