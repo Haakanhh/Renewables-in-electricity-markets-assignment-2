@@ -259,8 +259,8 @@ def plot_DA_offers(p_DA, in_sample_scenarios, title="Day-ahead offers", Threshol
     hours = np.arange(24)
 
     fig, (ax1, ax2) = plt.subplots(
-        2, 1, sharex=True, figsize=(12, 8),
-        gridspec_kw={"height_ratios": [3, 2]}
+        2, 1, sharex=True, figsize=(10, 5),
+        gridspec_kw={"height_ratios": [2.5, 2]}
     )
 
     # Top subplot: offering + avg forecasted wind
@@ -281,7 +281,7 @@ def plot_DA_offers(p_DA, in_sample_scenarios, title="Day-ahead offers", Threshol
     ax1.tick_params(labelbottom=True)
     ax1.set_ylim(0, 550)
     ax1.grid(True, alpha=0.3)
-    ax1.legend(loc="upper center", bbox_to_anchor=(0.5, -0.12), ncol=2)
+    #ax1.legend(loc="upper center", bbox_to_anchor=(0.5, -0.12), ncol=2)
 
     # Bottom subplot: avg deficit prediction
     ax2.step(
@@ -301,8 +301,23 @@ def plot_DA_offers(p_DA, in_sample_scenarios, title="Day-ahead offers", Threshol
     if Threshold_value is not None:
         ax2.axhline(Threshold_value, color="black", linestyle="--", linewidth=1, label=f"P_deficit = {Threshold_value}")
     ax2.grid(True, alpha=0.3)
-    ax2.legend(loc="upper center", bbox_to_anchor=(0.5, -0.22), ncol=2)
+    #ax2.legend(loc="upper center", bbox_to_anchor=(0.5, -0.22), ncol=2)
 
+
+        # Collect handles and labels from both axes
+    handles1, labels1 = ax1.get_legend_handles_labels()
+    handles2, labels2 = ax2.get_legend_handles_labels()
+
+    # Combine
+    handles = handles1 + handles2
+    labels = labels1 + labels2
+
+    # Create one legend for the whole figure
+    fig.legend(handles, labels,
+            loc="upper center",
+            bbox_to_anchor=(0.5, 0.1),
+            ncol=4,
+            fontsize=12)
     fig.tight_layout()
     fig.subplots_adjust(bottom=0.2)
     plt.show()
@@ -324,7 +339,7 @@ def plot_profit_distribution(profit_per_scenario, n_bins = 15, title="Profit dis
 def plot_cumulative_profit_distribution(profit_per_scenario, title="Cumulative profit distribution", tail_fraction=1.0, mean=True
 ):
 
-    plt.figure(figsize=(12, 6))
+    plt.figure(figsize=(8, 6))
 
     # Sort profits
     sorted_profit = np.sort(np.asarray(profit_per_scenario))
@@ -355,25 +370,25 @@ def plot_cumulative_profit_distribution(profit_per_scenario, title="Cumulative p
         )
 
     plt.title(title, fontsize=18)
-    plt.xlabel("Total profit per scenario (MDKK)", fontsize=14)
-    plt.ylabel("Cumulative probability (subset)", fontsize=14)
-    plt.xticks(fontsize=14)
-    plt.yticks(fontsize=14)
+    plt.xlabel("Total profit per scenario (MDKK)", fontsize=16)
+    plt.ylabel("Probability", fontsize=16)
+    plt.xticks(fontsize=12)
+    plt.yticks(fontsize=12)
     plt.ylim(0, 1.02)
     plt.grid(True, alpha=0.3)
-    plt.legend(fontsize=14)
+    plt.legend(fontsize=16)
     plt.show()
 
-def plot_cdf_comparison_cvar(
+def plot_cdf_comparison(
     profit_a,
     profit_b,
     label_a="Strategy A",
     label_b="Strategy B",
     title="CDF comparison (CVaR view)",
-    alpha=0.9
+    alpha=0.9,
+    ls_second="-",
+    mean=False
 ):
-    import numpy as np
-    import matplotlib.pyplot as plt
 
     plt.figure(figsize=(8, 6))
 
@@ -390,7 +405,16 @@ def plot_cdf_comparison_cvar(
 
     # --- Plot full CDFs
     plt.step(x_a, cdf_a, where="post", linewidth=2, label=label_a)
-    plt.step(x_b, cdf_b, where="post", linewidth=2, label=label_b)
+    plt.step(x_b, cdf_b, where="post", linewidth=2, label=label_b, linestyle=ls_second)
+
+    if mean:
+        mean_profit = x_a.mean()
+        plt.axvline(
+            mean_profit,
+            color="red",
+            linestyle="dashed",
+            label=f"Mean {label_a}: {mean_profit:.2f} MDKK"
+        )
 
     # --- Only show tail
     plt.ylim(0, 1-alpha+0.01)
@@ -713,7 +737,7 @@ def solve_risk_averse_two_price(in_sample_scenarios, alpha=0.9, beta=0, silent=F
 
 
 def plot_profit_cvar_tradeoff(cvar_list, exp_profit, beta_range, annotate=True):
-    plt.figure(figsize=(8, 6))
+    plt.figure(figsize=(8, 4))
     plt.plot(cvar_list, exp_profit, marker='o', linewidth=2)
 
     if annotate:
@@ -762,7 +786,7 @@ def plot_DA_offers_risk(beta_range, p_DA_list, tol=1e-6):
     import matplotlib.pyplot as plt
 
     hours = np.arange(24)
-    plt.figure(figsize=(8, 6))
+    plt.figure(figsize=(8, 4))
 
     # --- Group identical full-day strategies
     unique_strategies = []
@@ -824,8 +848,6 @@ def plot_DA_offers_risk(beta_range, p_DA_list, tol=1e-6):
     plt.show()
 
 
-# %%
-import numpy as np
 
 def evaluate_fixed_bid_risk(in_sample_scenarios, p_DA_input, alpha=0.9):
     """
@@ -919,7 +941,7 @@ def plot_DA_offer_folds(folds):
     
     hours = np.arange(24)
 
-    plt.figure(figsize=(8, 6))
+    plt.figure(figsize=(12, 6))
     # Loop over all folds
     import itertools
 
@@ -944,17 +966,17 @@ def plot_DA_offer_folds(folds):
     plt.xlim(0, 23)
     plt.xlabel("Hour", fontsize=16)
     plt.ylabel("DA Offer (MW)", fontsize=16)
-    plt.title("DA Offers for Beta=1 Across All Folds", fontsize=20)
+    #plt.title("DA Offers for Beta=1 Across All Folds", fontsize=20)
     plt.legend(fontsize=14)
     plt.xticks(fontsize=12)
     plt.yticks(fontsize=12)
-    plt.grid(True)
+    plt.grid(True, alpha=0.4)
     plt.show()
 
 
 
-def plot_scatter_profit_cvar(profit_list, cvar_list):
-    plt.figure(figsize=(7, 6))
+def plot_scatter_profit_cvar(profit_list, cvar_list, base_profit, base_cvar):
+    plt.figure(figsize=(8, 6))
 
     coef = np.polyfit(cvar_list, profit_list, 1)
     slope, intercept = coef
@@ -967,47 +989,58 @@ def plot_scatter_profit_cvar(profit_list, cvar_list):
     ss_tot = np.sum((np.array(profit_list) - np.mean(profit_list))**2)
     r2 = 1 - ss_res / ss_tot
 
-
+    # Scatter samples
     plt.scatter(cvar_list, profit_list, alpha=0.7)
-    plt.plot(x, y, color='red', label=f"Fit: y = {slope:.2f}x + {intercept:.2f}\n$R^2$ = {r2:.3f}")
-    plt.xlabel("CVaR")
-    plt.ylabel("Expected Profit")
-    plt.title("CVaR vs Expected Profit (In-sample across seeds)")
 
+    # Regression line
+    plt.plot(x, y, color='black',
+             label=f"Fit: y = {slope:.2f}x + {intercept:.2f}\n$R^2$ = {r2:.3f}", linestyle="--")
+
+    # Base case point
+    plt.scatter(base_cvar, base_profit,
+                color='red', s=100, marker='X', label="Base case", zorder=5)
+    plt.xlabel("CVaR [MDKK]", fontsize=16)
+    plt.ylabel("Expected Profit [MDKK]", fontsize=16)
+
+    plt.xticks(fontsize=12)
+    plt.yticks(fontsize=12)
     plt.grid(True, alpha=0.3)
-    plt.legend()
-
+    plt.legend(fontsize=16)
     plt.xlim(left=0)
     plt.ylim(bottom=min(profit_list)-1)
     plt.show()
 
-def plot_boxplot_profit_cvar(profit_list, cvar_list):
+
+
+def plot_boxplot_profit_cvar(profit_list, cvar_list, base_profit, base_cvar):
     plt.figure(figsize=(8, 6))
 
     data = [profit_list, cvar_list]
 
     box = plt.boxplot(
         data,
-        patch_artist=True,   # allows coloring
+        patch_artist=True,
         labels=["Expected Profit", "CVaR"]
     )
 
-    # Add colors
-    colors = ["skyblue", "salmon"]
+    colors = ["#b2b2b2", "#b2b2b2"]
     for patch, color in zip(box['boxes'], colors):
         patch.set_facecolor(color)
 
-    # Optional styling tweaks
     for median in box['medians']:
         median.set_color('black')
         median.set_linewidth(2)
 
-    plt.ylabel("MDKK")
-    plt.title("In-sample Profit vs CVaR Across Scenario Seeds")
+    # Base case markers
+    plt.scatter(1, base_profit, color="red", s=100, marker='X', zorder=5, linewidths=0.5, label="Base case")
+    plt.scatter(2, base_cvar, color='red', s=100, marker='X', linewidths=0.5, zorder=5)
+
+    plt.ylabel("MDKK", fontsize=16)
+    plt.xticks(fontsize=12)
+    plt.yticks(fontsize=12)
     plt.grid(axis='y', alpha=0.3)
-
+    plt.legend(fontsize=16)
     plt.show()
-
 
 
 def Load_profile_generation(random_state=None, Profiles=300, P_max=600, P_min=220, P_delta=35, plot=False):
