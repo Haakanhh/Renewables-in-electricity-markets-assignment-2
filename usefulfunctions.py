@@ -1054,10 +1054,12 @@ def Load_profile_generation(random_state=None, Profiles=300, P_max=600, P_min=22
         Minimum power consumption (kW), default 220
     P_delta : float
         Maximum minute-to-minute change (kW), default 35
-    
+    plot : bool
+        If True, plot a histogram of all generated load values.
+        
     Returns:
     --------
-    np.ndarray
+    Profiles: np.ndarray
         Array of shape (Profiles, 60) containing load profiles in kW.
         Each row is one profile with 60 values (one per minute in an hour).
     """
@@ -1090,66 +1092,125 @@ def Load_profile_generation(random_state=None, Profiles=300, P_max=600, P_min=22
             current_power = next_power
     
     if plot:
-        plt.figure(figsize=(8,6))
+        plt.figure(figsize=(7,4))
         plt.hist(profiles.flatten(), bins=50)
-        plt.xlabel("Load", fontsize=16)
-        plt.ylabel("Frequency", fontsize=16)
-        #plt.title("Distribution of all load values")
-        plt.xticks(fontsize=12)
-        plt.yticks(fontsize=12)
+        plt.xlabel("Load [kW]", fontsize=13)
+        plt.ylabel("Frequency", fontsize=13)
+        plt.xticks(fontsize=13)
+        plt.yticks(fontsize=13)
         plt.show()
 
     return profiles
 
 
 def Optimal_reserve_bid_ALSO_X (in_sample_profiles, q, M=10**4, silent=False):
-
+    """
+    Solve for optimal reserve bid using the ALSO-X method.
+    
+    
+    Parameters:
+    -----------
+    in_sample_profiles : np.ndarray
+        Array of shape (n_profiles, n_minutes) containing load profiles in kW.
+    q : int
+        Violation budget: maximum number of point violations allowed.
+    M : float, optional
+        Big-M parameter for the constraint linearization, default 10**4.
+    silent : bool, optional
+        If False (default), print computational details (runtime, variables, constraints).
+        
+    Returns:
+    --------
+    m : gurobipy.Model
+        The solved Gurobi optimization model.
+    c_up_value : float
+        Optimal reserve bid value in kW, or np.nan if optimization failed.
+    y_value : np.ndarray
+        Array of shape (n_minutes, n_profiles) with binary decision variables.
+        y[m, w] = 1 indicates that reserve bid c_up is not available at minute m in profile w.
+    F_up : np.ndarray
+        Transposed load profiles (n_minutes, n_profiles) representing available upward reserve.
+    """
 
     m = gp.Model("Optimal_reserve_bid_ALSO-X")
     m.Params.OutputFlag = 0
+
+    
 
     # Parameters
     n_profiles = in_sample_profiles.shape[0]
     n_minutes = in_sample_profiles.shape[1]
     F_up = (in_sample_profiles).T # F_up[m, w] = available upward reserve from load reduction
-    
-
-    model = gp.Model("Optimal_reserve_bid_ALSO_X")
-    if silent:
-        model.Params.OutputFlag = 0
+      
 
    # Variables
-    c_up = model.addVar(lb=0.0, name="c_up")
-    y = model.addVars(n_minutes, n_profiles, vtype=gp.GRB.BINARY, name="y")
+    c_up = m.addVar(lb=0.0, name="c_up")
+    y = m.addVars(n_minutes, n_profiles, vtype=gp.GRB.BINARY, name="y")
 
 
     # Objective
-    model.setObjective(c_up, gp.GRB.MAXIMIZE)
+    m.setObjective(c_up, gp.GRB.MAXIMIZE)
 
 
     # ALSO-X constraints
-    for m in range(n_minutes):
+    for min in range(n_minutes):
         for w in range(n_profiles):
-            model.addConstr(c_up - F_up[m, w] <= M * y[m, w], name=f"alsox_{m}_{w}")
+            m.addConstr(c_up - F_up[min, w] <= M * y[min, w], name=f"alsox_{min}_{w}")
 
-    model.addConstr(
-        gp.quicksum(y[m, w] for m in range(n_minutes) for w in range(n_profiles)) <= q,
+    m.addConstr(
+        gp.quicksum(y[min, w] for min in range(n_minutes) for w in range(n_profiles)) <= q,
         name="violation_budget"
     )
 
-    model.optimize()
+    m.optimize()
 
-    c_up_value = c_up.X if model.Status == gp.GRB.OPTIMAL else np.nan
-    y_value = np.array([[y[m, w].X for w in range(n_profiles)] for m in range(n_minutes)])
+    if silent == False:
+        # Print computational details
+        runtime_sec    = m.Runtime
+        num_vars       = int(m.NumVars)
+        num_constrs    = int(m.NumConstrs)
+        print(f"  Computational time:    {runtime_sec:.6f} s")
+        print(f"  Decision variables:    {num_vars}")
+        print(f"  Constraints:           {num_constrs}")
 
-    return model, c_up_value, y_value, F_up
+
+    c_up_value = c_up.X if m.Status == gp.GRB.OPTIMAL else np.nan
+    y_value = np.array([[y[min, w].X for w in range(n_profiles)] for min in range(n_minutes)])
+
+    return m, c_up_value, y_value, F_up
 
 
 def Optimal_reserve_bid_CVaR (in_sample_profiles, epsilon, silent=False):
+    """
+    Solve for optimal reserve bid using Conditional Value at Risk (CVaR).
+    
+    
+    Parameters:
+    -----------
+    in_sample_profiles : np.ndarray
+        Array of shape (n_profiles, n_minutes) containing load profiles in kW.
+        Each row represents one load profile with values for each minute.
+    epsilon : float
+        Risk tolerance parameter (0 to 1 - low to high). 
+    silent : bool, optional
+        If False (default), print computational details (runtime, variables, constraints).
+        
+    Returns:
+    --------
+    model : gurobipy.Model
+        The solved Gurobi optimization model.
+    c_up_value : float
+        Optimal reserve bid value in kW, or np.nan if optimization failed.
+    beta_value : float
+        Optimal beta value (lower bound on tail shortfalls), or np.nan if optimization failed.
+    zeta_value : np.ndarray
+        Array of shape (n_minutes, n_profiles) representing shortfall variables.
+    F_up : np.ndarray
+        Transposed load profiles (n_minutes, n_profiles) representing available upward reserve.
+    """
 
     model = gp.Model("Optimal_reserve_bid_CVaR")
-    if silent:
-        model.Params.OutputFlag = 0
+    model.Params.OutputFlag = 0
 
     # Parameters
     n_profiles = in_sample_profiles.shape[0]
@@ -1169,7 +1230,7 @@ def Optimal_reserve_bid_CVaR (in_sample_profiles, epsilon, silent=False):
     # Objective: maximize reserve bid
     model.setObjective(c_up, gp.GRB.MAXIMIZE)
 
-    # CVaR constraints
+    # CVaR constraints:
     # c_up - F_up[m,w] <= zeta[m,w]
     for m in range(n_minutes):
         for w in range(n_profiles):
@@ -1190,6 +1251,16 @@ def Optimal_reserve_bid_CVaR (in_sample_profiles, epsilon, silent=False):
 
     model.optimize()
 
+    if silent == False:
+        # Print computational details
+        runtime_sec    = model.Runtime
+        num_vars       = int(model.NumVars)
+        num_constrs    = int(model.NumConstrs)
+        print(f"  Computational time:    {runtime_sec:.6f} s")
+        print(f"  Decision variables:    {num_vars}")
+        print(f"  Constraints:           {num_constrs}")
+
+
     c_up_value = c_up.X if model.Status == gp.GRB.OPTIMAL else np.nan
     beta_value = beta.X if model.Status == gp.GRB.OPTIMAL else np.nan
     zeta_value = np.array([[zeta[m, w].X for w in range(n_profiles)] for m in range(n_minutes)])
@@ -1198,6 +1269,24 @@ def Optimal_reserve_bid_CVaR (in_sample_profiles, epsilon, silent=False):
 
 
 def histogram_of_violations(c_up, F_up, title="Histogram of violations"):
+    """
+    Visualize the distribution of reserve bid violations across load profiles.
+    
+    Parameters:
+    -----------
+    c_up : float
+        The reserve bid value in kW to evaluate against the available reserves.
+    F_up : np.ndarray
+        Array of shape (n_minutes, n_profiles) representing available upward reserve
+        at each minute for each load profile.
+    title : str, optional
+        Title for the histogram plot, default "Histogram of violations".
+        
+    Returns:
+    --------
+    None
+        Displays the histogram plot.
+    """
     F_up = np.asarray(F_up, dtype=float)
     
     # Count violations per profile: for each profile w, count minutes m where F_up[m, w] < c_up
@@ -1229,48 +1318,26 @@ def histogram_of_violations(c_up, F_up, title="Histogram of violations"):
     plt.show()
     
 
-def plot_Pxx_comparison(alsox_results_df, title="Reliability requirement comparison"):
-    df = alsox_results_df.iloc[::-1].copy()
-
-    fig, ax1 = plt.subplots(figsize=(10, 6))
-    ax2 = ax1.twinx()
-
-    line1 = ax1.plot(
-        df["Reliability requirement"],
-        df["c_up_AlsoX"],
-        marker="o",
-        linewidth=2,
-        color="tab:blue",
-        label="Optimal reserve bid"
-    )
-
-    line2 = ax2.plot(
-        df["Reliability requirement"],
-        df["share_not_available"],
-        marker="s",
-        linewidth=2,
-        color="tab:orange",
-        label="Expected reserve shortfall"
-    )
-
-    ax1.set_xlabel("Reliability requirement")
-    ax1.set_ylabel("Reserve bid [kW]", color="tab:blue")
-    ax2.set_ylabel("Expected reserve shortfall [%]", color="tab:orange")
-
-    ax1.tick_params(axis="y", labelcolor="tab:blue")
-    ax2.tick_params(axis="y", labelcolor="tab:orange")
-
-    lines = line1 + line2
-    labels = [line.get_label() for line in lines]
-    ax1.legend(lines, labels, loc="best")
-
-    ax1.grid(True, alpha=0.3)
-    ax1.set_title(title)
-    fig.tight_layout()
-    plt.show()
-
 
 def plot_Pxx_comparison_mean(alsox_results_df, title="Reliability requirement comparison"):
+    """
+    Visualize the comparison between optimal reserve bid and mean shortfall across reliability requirements.
+    
+    Parameters:
+    -----------
+    alsox_results_df : pd.DataFrame
+        DataFrame containing optimization results with columns:
+        - "Reliability requirement": reliability level labels (e.g., "P80", "P90", "P100")
+        - "c_up_AlsoX": optimal reserve bid values in kW
+        - "mean_shortfall": mean shortfall values in kW
+    title : str, optional
+        Title for the plot, default "Reliability requirement comparison".
+        
+    Returns:
+    --------
+    None
+        Displays the dual-axis plot.
+    """
     df = alsox_results_df.iloc[::-1].copy()
 
     fig, ax1 = plt.subplots(figsize=(7, 4))
@@ -1320,6 +1387,32 @@ def plot_Pxx_comparison_mean(alsox_results_df, title="Reliability requirement co
     plt.show()
 
 def compute_normalized_Pxx_metrics(alsox_results_df, p_min=80, p_max=100, verbose=True):
+    """
+    Compute and normalize reliability metrics across different Pxx requirements.
+    
+    Parameters:
+    -----------
+    alsox_results_df : pd.DataFrame
+        DataFrame containing optimization results with columns:
+        - "Reliability requirement": reliability level labels (e.g., "P80", "P90", "P100")
+        - "c_up_AlsoX": optimal reserve bid values in kW
+        - "mean_shortfall": mean shortfall values in kW
+    p_min : int, optional
+        Minimum reliability percentile for filtering, default 80 (P80).
+    p_max : int, optional
+        Maximum reliability percentile for filtering, default 100 (P100).
+    verbose : bool, optional
+        If True (default), print the normalized results table to console.
+        
+    Returns:
+    --------
+    result : pd.DataFrame
+        Filtered DataFrame with columns:
+        - "Reliability requirement": reliability level labels
+        - "c_up_pct": normalized reserve bid as percentage (0-100%)
+        - "shortfall_pct": normalized shortfall as percentage (0-100%)
+        - "difference_pct_points": percentage point difference between bid and shortfall
+    """
     df = alsox_results_df.copy()
 
     # Extract numeric Pxx
@@ -1361,3 +1454,62 @@ def compute_normalized_Pxx_metrics(alsox_results_df, p_min=80, p_max=100, verbos
         print(result.to_string(index=False, float_format="%.2f"))
 
     return result
+
+
+def plot_Pxx_comparison(alsox_results_df, title="Reliability requirement comparison"):
+    """
+    Visualize the comparison between optimal reserve bid and reserve shortfall availability across reliability requirements.
+    
+    Parameters:
+    -----------
+    alsox_results_df : pd.DataFrame
+        DataFrame containing optimization results with columns:
+        - "Reliability requirement": reliability level labels (e.g., "P80", "P90", "P100")
+        - "c_up_AlsoX": optimal reserve bid values in kW
+        - "share_not_available": percentage of time reserve is not available (0-100%)
+    title : str, optional
+        Title for the plot, default "Reliability requirement comparison".
+        
+    Returns:
+    --------
+    None
+        Displays the dual-axis plot.
+    """
+    df = alsox_results_df.iloc[::-1].copy()
+
+    fig, ax1 = plt.subplots(figsize=(10, 6))
+    ax2 = ax1.twinx()
+
+    line1 = ax1.plot(
+        df["Reliability requirement"],
+        df["c_up_AlsoX"],
+        marker="o",
+        linewidth=2,
+        color="tab:blue",
+        label="Optimal reserve bid"
+    )
+
+    line2 = ax2.plot(
+        df["Reliability requirement"],
+        df["share_not_available"],
+        marker="s",
+        linewidth=2,
+        color="tab:orange",
+        label="Expected reserve shortfall"
+    )
+
+    ax1.set_xlabel("Reliability requirement")
+    ax1.set_ylabel("Reserve bid [kW]", color="tab:blue")
+    ax2.set_ylabel("Expected reserve shortfall [%]", color="tab:orange")
+
+    ax1.tick_params(axis="y", labelcolor="tab:blue")
+    ax2.tick_params(axis="y", labelcolor="tab:orange")
+
+    lines = line1 + line2
+    labels = [line.get_label() for line in lines]
+    ax1.legend(lines, labels, loc="best")
+
+    ax1.grid(True, alpha=0.3)
+    ax1.set_title(title)
+    fig.tight_layout()
+    plt.show()
