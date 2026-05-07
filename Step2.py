@@ -149,3 +149,5 @@ alsox_results_df["share_not_available"] = alsox_results_df["c_up_AlsoX"].apply(l
 
 # The actual plot
 uf.plot_Pxx_comparison(alsox_results_df)
+
+# %%

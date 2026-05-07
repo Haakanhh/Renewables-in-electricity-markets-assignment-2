@@ -4,6 +4,28 @@ import matplotlib.pyplot as plt
 import gurobipy as gp
 
 def generate_scenarios(random_state=None, n_wind=20, n_price=20, n_surp_def=4):
+    """
+    Generate combined scenario data from historical wind, price, and surplus/deficit data.
+    
+    Parameters:
+    -----------
+    random_state : int or np.random.Generator, optional
+        Seed for the random number generator for reproducibility. If None, uses unseeded randomness.
+    n_wind : int, optional
+        Number of seasonal wind scenarios to generate - 1 scenario is hourly data for 1 day, default 20. 
+    n_price : int, optional
+        Number of seasonal price scenarios to generate - 1 scenario is hourly data for 1 day, default 20. 
+    n_surp_def : int, optional
+        Number of random surplus/deficit scenarios to generate - 1 scenario is hourly data for 1 day, default 4.
+        
+    Returns:
+    --------
+    data : np.ndarray
+        Array of shape (24, n_scenarios, 3) where:
+        - 24 = hours per day
+        - n_scenarios = n_wind × n_price × n_surp_def (total scenario count)
+        - 3 channels: [wind production (MWh), day-ahead price (DKK/MWh), surplus/deficit binary]
+    """
     rng = np.random.default_rng(random_state)
 
     # Extract wind data
@@ -113,6 +135,31 @@ def generate_scenarios(random_state=None, n_wind=20, n_price=20, n_surp_def=4):
 
 
 def solve_stochastic_strategy_one_price(in_sample_scenarios, silent=False):
+    """
+    Solve optimal day-ahead offer using stochastic optimization with single balancing price.
+    
+    Parameters:
+    -----------
+    in_sample_scenarios : np.ndarray
+        Array of shape (n_hours, n_scenarios, 3) containing sampled scenarios where:
+        - n_hours = 24 (hourly offers over one day)
+        - n_scenarios = number of Monte Carlo scenarios
+        - 3 channels: [wind production (MWh), day-ahead price (DKK/MWh), surplus/deficit binary]
+    silent : bool, optional
+        If False (default), print computational details (runtime, variables, constraints).
+        
+    Returns:
+    --------
+    m : gurobipy.Model
+        The solved Gurobi optimization model.
+    p_DA_vec : np.ndarray
+        Array of shape (24,) containing optimal day-ahead offer per hour in MWh.
+    Delta : gurobipy.tupledict
+        Variable dictionary of shape (24, n_scenarios) representing the difference between 
+        real production and day-ahead offer for each hour and scenario.
+    profit_matrix : np.ndarray
+        Array of shape (24, n_scenarios) containing profit per hour and scenario in MDKK.
+    """
     
     # in_sample_scenarios has shape (n_hours, n_scenarios, 3)
     p_real = in_sample_scenarios[:,:,0]
@@ -171,6 +218,34 @@ def solve_stochastic_strategy_one_price(in_sample_scenarios, silent=False):
 
 
 def solve_stochastic_strategy_two_price(in_sample_scenarios, silent=False):
+    """
+    Solve optimal day-ahead offer using stochastic optimization with two-price balancing.
+    
+    Parameters:
+    -----------
+    in_sample_scenarios : np.ndarray
+        Array of shape (n_hours, n_scenarios, 3) containing sampled scenarios where:
+        - n_hours = 24 (hourly offers over one day)
+        - n_scenarios = number of Monte Carlo scenarios
+        - 3 channels: [wind production (MWh), day-ahead price (DKK/MWh), surplus/deficit binary]
+    silent : bool, optional
+        If False (default), print computational details (runtime, variables, constraints).
+        
+    Returns:
+    --------
+    m : gurobipy.Model
+        The solved Gurobi optimization model.
+    p_DA_vec : np.ndarray
+        Array of shape (24,) containing optimal day-ahead offer per hour in MWh.
+    Delta_up : gurobipy.tupledict
+        Variable dictionary of shape (24, n_scenarios) representing positive imbalances 
+        (production above day-ahead offer) for each hour and scenario.
+    Delta_down : gurobipy.tupledict
+        Variable dictionary of shape (24, n_scenarios) representing negative imbalances 
+        (production below day-ahead offer) for each hour and scenario.
+    profit_matrix : np.ndarray
+        Array of shape (24, n_scenarios) containing profit per hour and scenario in MDKK.
+    """
 
     # in_sample_scenarios has shape (n_hours, n_scenarios, 3)
     p_real = in_sample_scenarios[:,:,0]
@@ -243,6 +318,29 @@ def solve_stochastic_strategy_two_price(in_sample_scenarios, silent=False):
     return m, p_DA_vec, Delta_up, Delta_down, profit_matrix
 
 def plot_DA_offers(p_DA, in_sample_scenarios, title="Day-ahead offers", Threshold_value=None):
+    """
+    Visualize day-ahead offers compared to forecasted wind production and deficit probability.
+    
+    Parameters:
+    -----------
+    p_DA : np.ndarray
+        Array of shape (24,) containing day-ahead offers per hour in MWh.
+    in_sample_scenarios : np.ndarray
+        Array of shape (24, n_scenarios, 3) containing sampled scenarios where:
+        - 24 = hours per day
+        - n_scenarios = number of scenarios
+        - 3 channels: [wind production (MWh), day-ahead price (DKK/MWh), surplus/deficit binary]
+    title : str, optional
+        Title for the plot, default "Day-ahead offers".
+    Threshold_value : float, optional
+        Optional threshold value to display on the deficit probability subplot (0-1), default None.
+        
+    Returns:
+    --------
+    None
+        Displays a two-panel plot with day-ahead offers and average wind production (top panel) 
+        and deficit probability prediction (bottom panel).
+    """
     # Average forecasted wind production per hour (24-hour profile)
     avg_forecasted_wind_per_hour = in_sample_scenarios[:, :, 0].mean(axis=1)
     df_avg_forecasted_wind = pd.DataFrame({
@@ -325,6 +423,25 @@ def plot_DA_offers(p_DA, in_sample_scenarios, title="Day-ahead offers", Threshol
 
 
 def plot_profit_distribution(profit_per_scenario, n_bins = 15, title="Profit distribution per scenario", x_label="Total profit (MDKK)"):
+    """
+    Visualize the distribution of profits across scenarios using a histogram.
+    
+    Parameters:
+    -----------
+    profit_per_scenario : np.ndarray
+        Array containing profit values for each scenario.
+    n_bins : int, optional
+        Number of bins for the histogram, default 15.
+    title : str, optional
+        Title for the plot, default "Profit distribution per scenario".
+    x_label : str, optional
+        Label for the x-axis, default "Total profit (MDKK)".
+        
+    Returns:
+    --------
+    None
+        Displays a histogram of profit distribution with a vertical line indicating the mean profit.
+    """
     plt.figure(figsize=(10,6))
     plt.hist(profit_per_scenario, bins=n_bins)
     plt.axvline(profit_per_scenario.mean(), color='red', linestyle='dashed', label=f"Mean: {profit_per_scenario.mean():.2f} MDKK")
@@ -338,6 +455,26 @@ def plot_profit_distribution(profit_per_scenario, n_bins = 15, title="Profit dis
 
 def plot_cumulative_profit_distribution(profit_per_scenario, title="Cumulative profit distribution", tail_fraction=1.0, mean=True
 ):
+    """
+    Visualize the cumulative distribution function (CDF) of profits across scenarios.
+    
+    Parameters:
+    -----------
+    profit_per_scenario : np.ndarray
+        Array containing profit values for each scenario.
+    title : str, optional
+        Title for the plot, default "Cumulative profit distribution".
+    tail_fraction : float, optional
+        Fraction of lowest profits to display (0-1), default 1.0 (shows all scenarios).
+        Use values < 1.0 to focus on the worst-case scenarios.
+    mean : bool, optional
+        If True (default), display a vertical line at the mean profit across all scenarios.
+        
+    Returns:
+    --------
+    None
+        Displays a step plot of the empirical CDF with optional tail focus and mean line.
+    """
 
     plt.figure(figsize=(8, 6))
 
@@ -389,6 +526,35 @@ def plot_cdf_comparison(
     ls_second="-",
     mean=False
 ):
+    """
+    Compare cumulative distribution functions (CDFs) of profits from two strategies, 
+    focusing on the tail.
+    
+    Parameters:
+    -----------
+    profit_a : np.ndarray
+        Array of profit values from the first strategy (baseline).
+    profit_b : np.ndarray
+        Array of profit values from the second strategy for comparison.
+    label_a : str, optional
+        Label for the first strategy in the legend, default "Strategy A".
+    label_b : str, optional
+        Label for the second strategy in the legend, default "Strategy B".
+    title : str, optional
+        Title for the plot, default "CDF comparison (CVaR view)".
+    alpha : float, optional
+        Confidence level (0-1) for the CVaR tail region, default 0.9. Only the worst (1-alpha) 
+        fraction of scenarios are displayed to emphasize tail behavior.
+    ls_second : str, optional
+        Line style for the second strategy's CDF line (matplotlib line style), default "-" (solid).
+    mean : bool, optional
+        If True (default False), display a vertical line at the mean profit of the first strategy.
+        
+    Returns:
+    --------
+    None
+        Displays a two-strategy CDF comparison plot with the tail region (worst-case scenarios) emphasized.
+    """
 
     plt.figure(figsize=(8, 6))
 
@@ -435,12 +601,44 @@ def plot_cdf_comparison(
 
 
 def scenario_profit_stats(profit_matrix):
+    """
+    Compute the minimum and maximum total profit across all scenarios.
+    
+    Parameters:
+    -----------
+    profit_matrix : np.ndarray
+        Array of shape (n_hours, n_scenarios) containing profit per hour and scenario.
+        The values are summed over hours to obtain total profit per scenario.
+        
+    Returns:
+    --------
+    tuple of float
+        A pair containing the minimum and maximum total profit across all scenarios.
+    """
     profit_per_scenario = profit_matrix.sum(axis=0)
     return profit_per_scenario.min(), profit_per_scenario.max()
 
 
 
 def plot_profit_distribution_comparison(profit_per_scenario, profit_per_scenario_2, n_bins=15):
+
+    """
+    Compare the distribution of scenario profits for two strategies using overlaid histograms.
+    
+    Parameters:
+    -----------
+    profit_per_scenario : np.ndarray
+        Array of total profit values for the first strategy.
+    profit_per_scenario_2 : np.ndarray
+        Array of total profit values for the second strategy.
+    n_bins : int, optional
+        Number of bins to use for the shared histogram range, default 15.
+        
+    Returns:
+    --------
+    None
+        Displays a histogram comparison with mean profit markers for both strategies.
+    """
 
     all_profits = np.concatenate([profit_per_scenario, profit_per_scenario_2])
     bins = np.linspace(all_profits.min(), all_profits.max(), n_bins)  # 12 bins → 13 edges
@@ -461,6 +659,23 @@ def plot_profit_distribution_comparison(profit_per_scenario, profit_per_scenario
     plt.show()
 
 def create_folds(scenarios, n_in_sample, seed=42):
+    """
+    Split scenario data into shuffled folds for cross-validation.
+    
+    Parameters:
+    -----------
+    scenarios : np.ndarray
+        Array of shape (n_hours, n_samples, n_features) containing the full scenario set.
+    n_in_sample : int
+        Number of samples to include in each fold.
+    seed : int, optional
+        Seed for the random number generator used to shuffle scenario indices, default 42.
+        
+    Returns:
+    --------
+    list of np.ndarray
+        List of folds, where each fold has shape (n_hours, n_in_sample, n_features).
+    """
     n_samples = scenarios.shape[1]
     rng = np.random.default_rng(seed)
 
@@ -479,6 +694,24 @@ def create_folds(scenarios, n_in_sample, seed=42):
     return folds
 
 def cross_validate_folds(folds, two_price=False, silent=False):
+    """
+    Run cross-validation over a list of folds and collect in-sample and out-of-sample profits.
+    
+    Parameters:
+    -----------
+    folds : list of np.ndarray
+        List of scenario folds, where each fold has shape (n_hours, n_samples, 3).
+    two_price : bool, optional
+        If True, solve the two-price stochastic strategy for each fold.
+        If False (default), solve the one-price stochastic strategy.
+    silent : bool, optional
+        If False (default), print fold-by-fold evaluation results.
+        
+    Returns:
+    --------
+    tuple of list of float
+        Two lists containing the mean in-sample profit and mean out-of-sample profit for each fold.
+    """
 
     in_sample_means = []
     out_sample_means = []
@@ -519,6 +752,27 @@ def cross_validate_folds(folds, two_price=False, silent=False):
 
 
 def calculate_profit(scenarios_in, scenarios_out, p_DA_vec, two_price=False):
+    """
+    Calculate out-of-sample profits for a fixed day-ahead bid vector.
+    
+    Parameters:
+    -----------
+    scenarios_in : np.ndarray
+        Array of shape (n_hours, n_scenarios, 3) containing the in-sample scenarios used to
+        compute the mean day-ahead price per hour.
+    scenarios_out : np.ndarray
+        Array of shape (n_hours, n_scenarios, 3) containing the out-of-sample scenarios used
+        to evaluate the bid.
+    p_DA_vec : np.ndarray
+        Array of shape (n_hours,) containing the fixed day-ahead offer per hour in MWh.
+    two_price : bool, optional
+        If True, use the two-price balancing scheme. If False (default), use the one-price scheme.
+        
+    Returns:
+    --------
+    np.ndarray
+        Array of total profit values per out-of-sample scenario.
+    """
 
     # scenarios shape: (n_hours, n_scenarios, 3)
     p_real_out = scenarios_out[:, :, 0]
@@ -569,6 +823,23 @@ def calculate_profit(scenarios_in, scenarios_out, p_DA_vec, two_price=False):
     
 
 def plot_Cross_Validation_Profits(in_sample_means, out_sample_means, title="Expected profits for each fold"):
+    """
+    Visualize in-sample and out-of-sample mean profits for each cross-validation fold.
+    
+    Parameters:
+    -----------
+    in_sample_means : list of float
+        Mean in-sample profit for each fold.
+    out_sample_means : list of float
+        Mean out-of-sample profit for each fold.
+    title : str, optional
+        Title for the plot, default "Expected profits for each fold".
+        
+    Returns:
+    --------
+    None
+        Displays a grouped bar chart with average in-sample and out-of-sample profit lines.
+    """
     folds = np.arange(1, len(in_sample_means) + 1)
     x = np.arange(len(folds))
     bar_width = 0.4
@@ -590,6 +861,40 @@ def plot_Cross_Validation_Profits(in_sample_means, out_sample_means, title="Expe
     plt.show()
 
 def solve_risk_averse_one_price(in_sample_scenarios, alpha=0.9, beta=0, silent=False):
+    """
+    Solve the risk-averse stochastic day-ahead bidding problem with single balancing price.
+    
+    Parameters:
+    -----------
+    in_sample_scenarios : np.ndarray
+        Array of shape (n_hours, n_scenarios, 3) containing sampled scenarios where:
+        - n_hours = 24 (hourly offers over one day)
+        - n_scenarios = number of Monte Carlo scenarios
+        - 3 channels: [wind production (MWh), day-ahead price (DKK/MWh), surplus/deficit binary]
+    alpha : float, optional
+        Confidence level used in the CVaR term, default 0.9.
+    beta : float, optional
+        Risk-aversion weight between expected profit and CVaR, default 0.
+        Higher values put more emphasis on tail performance.
+    silent : bool, optional
+        If False (default), print computational details (runtime, variables, constraints).
+        
+    Returns:
+    --------
+    m : gurobipy.Model
+        The solved Gurobi optimization model.
+    p_DA_vec : np.ndarray
+        Array of shape (24,) containing optimal day-ahead offer per hour in MWh.
+    Delta : gurobipy.tupledict
+        Variable dictionary of shape (24, n_scenarios) representing the difference between
+        real production and day-ahead offer for each hour and scenario.
+    profit_matrix : np.ndarray
+        Array of shape (24, n_scenarios) containing profit per hour and scenario in MDKK.
+    cvar : float
+        Optimized CVaR value of the total profit distribution.
+    eta_vec : np.ndarray
+        Array of shape (n_scenarios,) containing the CVaR auxiliary slack variables.
+    """
     
     # in_sample_scenarios has shape (n_hours, n_scenarios, 3)
     p_real = in_sample_scenarios[:,:,0]
@@ -660,6 +965,37 @@ def solve_risk_averse_one_price(in_sample_scenarios, alpha=0.9, beta=0, silent=F
 
 
 def solve_risk_averse_two_price(in_sample_scenarios, alpha=0.9, beta=0, silent=False):
+    """
+    Solve the risk-averse stochastic day-ahead bidding problem with two-price balancing.
+    
+    Parameters:
+    -----------
+    in_sample_scenarios : np.ndarray
+        Array of shape (n_hours, n_scenarios, 3) containing sampled scenarios where:
+        - n_hours = 24 (hourly offers over one day)
+        - n_scenarios = number of Monte Carlo scenarios
+        - 3 channels: [wind production (MWh), day-ahead price (DKK/MWh), surplus/deficit binary]
+    alpha : float, optional
+        Confidence level used in the CVaR term, default 0.9.
+    beta : float, optional
+        Risk-aversion weight between expected profit and CVaR, default 0.
+        Higher values put more emphasis on tail performance.
+    silent : bool, optional
+        If False (default), print computational details (runtime, variables, constraints).
+        
+    Returns:
+    --------
+    m : gurobipy.Model
+        The solved Gurobi optimization model.
+    p_DA_vec : np.ndarray
+        Array of shape (24,) containing optimal day-ahead offer per hour in MWh.
+    profit_matrix : np.ndarray
+        Array of shape (24, n_scenarios) containing profit per hour and scenario in MDKK.
+    cvar : float
+        Optimized CVaR value of the total profit distribution.
+    eta_vec : np.ndarray
+        Array of shape (n_scenarios,) containing the CVaR auxiliary slack variables.
+    """
 
     # in_sample_scenarios has shape (n_hours, n_scenarios, 3)
     p_real = in_sample_scenarios[:,:,0]
@@ -737,6 +1073,25 @@ def solve_risk_averse_two_price(in_sample_scenarios, alpha=0.9, beta=0, silent=F
 
 
 def plot_profit_cvar_tradeoff(cvar_list, exp_profit, beta_range, annotate=True):
+    """
+    Visualize the tradeoff between CVaR and expected profit across risk-aversion weights.
+    
+    Parameters:
+    -----------
+    cvar_list : list of float
+        CVaR values corresponding to each tested beta value.
+    exp_profit : list of float
+        Expected profit values corresponding to each tested beta value.
+    beta_range : iterable of float
+        Sequence of beta values used to generate the tradeoff points.
+    annotate : bool, optional
+        If True (default), annotate every third point with its beta value.
+        
+    Returns:
+    --------
+    None
+        Displays a line plot of CVaR versus expected profit.
+    """
     plt.figure(figsize=(8, 4))
     plt.plot(cvar_list, exp_profit, marker='o', linewidth=2)
 
@@ -756,6 +1111,25 @@ def plot_profit_cvar_tradeoff(cvar_list, exp_profit, beta_range, annotate=True):
 
 
 def compute_profit_cvar_tradeoff(in_sample_scenarios, beta_range, alpha=0.9, scheme="two_price"):
+    """
+    Compute expected profit and CVaR values for a range of risk-aversion weights.
+    
+    Parameters:
+    -----------
+    in_sample_scenarios : np.ndarray
+        Array of shape (n_hours, n_scenarios, 3) containing the sampled in-sample scenarios.
+    beta_range : iterable of float
+        Sequence of beta values used to solve the risk-averse optimization problems.
+    alpha : float, optional
+        Confidence level used in the CVaR term, default 0.9.
+    scheme : str, optional
+        Risk model to use, either "two_price" (default) or "one_price".
+        
+    Returns:
+    --------
+    tuple of list
+        Three lists containing the expected profit, CVaR, and optimal day-ahead offer vector for each beta.
+    """
     exp_profit = []
     cvar_list = []
     p_DA_all = []
@@ -782,6 +1156,23 @@ def compute_profit_cvar_tradeoff(in_sample_scenarios, beta_range, alpha=0.9, sch
 
 
 def plot_DA_offers_risk(beta_range, p_DA_list, tol=1e-6):
+    """
+    Visualize day-ahead offers across different risk-aversion weights and group identical strategies.
+    
+    Parameters:
+    -----------
+    beta_range : iterable of float
+        Sequence of beta values corresponding to the risk-aversion levels used to generate the offers.
+    p_DA_list : list of np.ndarray
+        List of day-ahead offer vectors, where each array has shape (24,) and corresponds to one beta value.
+    tol : float, optional
+        Absolute tolerance used to decide whether two offer vectors are identical, default 1e-6.
+        
+    Returns:
+    --------
+    None
+        Displays a step plot of day-ahead offers, with identical strategies grouped and labeled together.
+    """
     import numpy as np
     import matplotlib.pyplot as plt
 
@@ -851,7 +1242,25 @@ def plot_DA_offers_risk(beta_range, p_DA_list, tol=1e-6):
 
 def evaluate_fixed_bid_risk(in_sample_scenarios, p_DA_input, alpha=0.9):
     """
-    Calculates profit and identifies worst scenarios for a FIXED p_DA vector.
+    Evaluate the profit distribution and CVaR statistics for a fixed day-ahead bid vector.
+    
+    Parameters:
+    -----------
+    in_sample_scenarios : np.ndarray
+        Array of shape (n_hours, n_scenarios, 3) containing sampled scenarios where:
+        - n_hours = 24 (hourly offers over one day)
+        - n_scenarios = number of Monte Carlo scenarios
+        - 3 channels: [wind production (MWh), day-ahead price (DKK/MWh), surplus/deficit binary]
+    p_DA_input : np.ndarray
+        Array of shape (n_hours,) containing the fixed day-ahead offer per hour in MWh.
+    alpha : float, optional
+        Confidence level used to define the CVaR tail, default 0.9.
+        
+    Returns:
+    --------
+    dict
+        Dictionary containing the CVaR value, VaR threshold, worst-scenario indices,
+        total profit per scenario, and the corresponding eta values.
     """
     n_hours, n_scenarios, _ = in_sample_scenarios.shape
     p_real = in_sample_scenarios[:, :, 0]
@@ -902,6 +1311,34 @@ def compute_DA_offer_samples(
     n_surp_def=4,
     seed=42
 ):
+    """
+    Generate multiple risk-averse day-ahead offer solutions from repeated scenario sampling.
+    
+    Parameters:
+    -----------
+    n_runs : int, optional
+        Number of repeated sampling and optimization runs to perform, default 50.
+    n_in_sample : int, optional
+        Number of scenarios to draw for each in-sample optimization problem, default 200.
+    alpha : float, optional
+        Confidence level used in the CVaR term, default 0.9.
+    beta : float, optional
+        Risk-aversion weight passed to the optimization model, default 1.
+    n_wind : int, optional
+        Number of wind sections used when generating scenarios, default 20.
+    n_price : int, optional
+        Number of price sections used when generating scenarios, default 20.
+    n_surp_def : int, optional
+        Number of surplus/deficit scenarios used when generating scenarios, default 4.
+    seed : int, optional
+        Seed for the master random number generator, default 42.
+        
+    Returns:
+    --------
+    tuple of np.ndarray
+        Three arrays containing the sampled day-ahead offers, average hourly profits,
+        and CVaR values for each run.
+    """
     rng_master = np.random.default_rng(seed)
     p_DA_list = []
     profit_list = []
@@ -938,6 +1375,20 @@ def compute_DA_offer_samples(
     return np.array(p_DA_list), np.array(profit_list).mean(axis=2), np.array(cvar_list)
 
 def plot_DA_offer_folds(folds):
+    """
+    Visualize the day-ahead offers obtained for each cross-validation fold.
+    
+    Parameters:
+    -----------
+    folds : list of np.ndarray
+        List of scenario folds, where each fold has shape (n_hours, n_samples, 3).
+        Each fold is passed to the risk-averse optimization model to obtain one day-ahead offer vector.
+        
+    Returns:
+    --------
+    None
+        Displays a step plot of the day-ahead offer curve for each fold.
+    """
     
     hours = np.arange(24)
 
@@ -976,6 +1427,25 @@ def plot_DA_offer_folds(folds):
 
 
 def plot_scatter_profit_cvar(profit_list, cvar_list, base_profit, base_cvar):
+    """
+    Visualize the relationship between expected profit and CVaR using a scatter plot.
+    
+    Parameters:
+    -----------
+    profit_list : list of float
+        List of expected profit values corresponding to the sampled risk-aversion settings.
+    cvar_list : list of float
+        List of CVaR values corresponding to the same sampled risk-aversion settings.
+    base_profit : float
+        Expected profit of the baseline strategy, shown as a highlighted marker.
+    base_cvar : float
+        CVaR value of the baseline strategy, shown as a highlighted marker.
+        
+    Returns:
+    --------
+    None
+        Displays a scatter plot with a fitted regression line and a highlighted base-case point.
+    """
     plt.figure(figsize=(8, 6))
 
     coef = np.polyfit(cvar_list, profit_list, 1)
@@ -1013,6 +1483,25 @@ def plot_scatter_profit_cvar(profit_list, cvar_list, base_profit, base_cvar):
 
 
 def plot_boxplot_profit_cvar(profit_list, cvar_list, base_profit, base_cvar):
+    """
+    Compare the distributions of expected profit and CVaR using side-by-side boxplots.
+    
+    Parameters:
+    -----------
+    profit_list : list of float
+        List of expected profit values corresponding to the sampled risk-aversion settings.
+    cvar_list : list of float
+        List of CVaR values corresponding to the same sampled risk-aversion settings.
+    base_profit : float
+        Expected profit of the baseline strategy, shown as a highlighted marker.
+    base_cvar : float
+        CVaR value of the baseline strategy, shown as a highlighted marker.
+        
+    Returns:
+    --------
+    None
+        Displays a boxplot comparing the spread of expected profit and CVaR values.
+    """
     plt.figure(figsize=(8, 6))
 
     data = [profit_list, cvar_list]
