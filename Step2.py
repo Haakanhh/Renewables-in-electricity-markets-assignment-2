@@ -46,6 +46,7 @@ print("CVaR:")
 m, c_up_CVaR, beta, zeta, F_up_CVaR = uf.Optimal_reserve_bid_CVaR (in_sample_profiles, epsilon, silent=False)
 
 print(f"The optimal reserve bid (CVaR): {c_up_CVaR}")
+print(f"The value of beta (CVaR): {beta}")
 
 # Plot histogram of violations per profile for CVaR
 uf.histogram_of_violations(c_up_CVaR, F_up_CVaR, title="Histogram of violations per profile - CVaR")

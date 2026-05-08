@@ -1031,7 +1031,7 @@ def plot_boxplot_profit_cvar(profit_list, cvar_list, base_profit, base_cvar):
     plt.scatter(2, base_cvar, color='red', s=100, marker='X', linewidths=0.5, zorder=5)
 
     plt.ylabel("MDKK", fontsize=16)
-    plt.xticks(fontsize=12)
+    plt.xticks(fontsize=16)
     plt.yticks(fontsize=12)
     plt.grid(axis='y', alpha=0.3)
     plt.legend(fontsize=16)
@@ -1092,10 +1092,10 @@ def Load_profile_generation(random_state=None, Profiles=300, P_max=600, P_min=22
             current_power = next_power
     
     if plot:
-        plt.figure(figsize=(7,4))
-        plt.hist(profiles.flatten(), bins=50)
-        plt.xlabel("Load [kW]", fontsize=13)
-        plt.ylabel("Frequency", fontsize=13)
+        plt.figure(figsize=(8,6))
+        plt.hist(profiles.flatten(), bins=40)
+        plt.xlabel("Load [kW]", fontsize=16)
+        plt.ylabel("Frequency", fontsize=16)
         plt.xticks(fontsize=13)
         plt.yticks(fontsize=13)
         plt.show()
@@ -1103,7 +1103,7 @@ def Load_profile_generation(random_state=None, Profiles=300, P_max=600, P_min=22
     return profiles
 
 
-def Optimal_reserve_bid_ALSO_X (in_sample_profiles, q, M=10**4, silent=False):
+def Optimal_reserve_bid_ALSO_X (in_sample_profiles, q, M=380, silent=False):
     """
     Solve for optimal reserve bid using the ALSO-X method.
     
