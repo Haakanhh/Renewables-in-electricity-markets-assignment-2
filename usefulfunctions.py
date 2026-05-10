@@ -679,7 +679,7 @@ def create_folds(scenarios, n_in_sample, seed=42):
 
     return folds
 
-def cross_validate_folds(folds, two_price=False, silent=False):
+def cross_validate_folds(folds, two_price=False, silent=True):
 
     in_sample_means = []
     out_sample_means = []
@@ -1041,7 +1041,7 @@ def solve_risk_averse_two_price(in_sample_scenarios, alpha=0.9, beta=0, silent=F
     return m, p_DA_vec, profit_matrix, cvar, eta_vec
 
 
-def plot_profit_cvar_tradeoff(cvar_list, exp_profit, beta_range, annotate=True):
+def plot_profit_cvar_tradeoff(cvar_list, exp_profit, beta_range, annotate=True, title="Risk return tradeoff"):
     """
     Visualize the tradeoff between CVaR and expected profit across risk-aversion weights.
     
@@ -1061,7 +1061,7 @@ def plot_profit_cvar_tradeoff(cvar_list, exp_profit, beta_range, annotate=True):
     None
         Displays a line plot of CVaR versus expected profit.
     """
-    plt.figure(figsize=(8, 4))
+    plt.figure(figsize=(8, 6))
     plt.plot(cvar_list, exp_profit, marker='o', linewidth=2)
 
     if annotate:
@@ -1072,6 +1072,7 @@ def plot_profit_cvar_tradeoff(cvar_list, exp_profit, beta_range, annotate=True):
 
     plt.xlabel("CVaR (MDKK)", fontsize=16)
     plt.ylabel("Expected Profit (MDKK)", fontsize=16)
+    plt.title(title, fontsize=20)
     plt.xticks(fontsize=12)
     plt.yticks(fontsize=12)
     plt.grid(True, alpha=0.3)
@@ -1079,7 +1080,7 @@ def plot_profit_cvar_tradeoff(cvar_list, exp_profit, beta_range, annotate=True):
     plt.show()
 
 
-def compute_profit_cvar_tradeoff(in_sample_scenarios, beta_range, alpha=0.9, scheme="two_price"):
+def compute_profit_cvar_tradeoff(in_sample_scenarios, beta_range, alpha=0.9, scheme="two_price",silent=False):
     """
     Compute expected profit and CVaR values for a range of risk-aversion weights.
     
@@ -1106,11 +1107,11 @@ def compute_profit_cvar_tradeoff(in_sample_scenarios, beta_range, alpha=0.9, sch
     for b in beta_range:
         if scheme == "two_price":
             _, p_DA_vec, profit_matrix, cvar, _ = solve_risk_averse_two_price(
-                in_sample_scenarios, alpha=alpha, beta=b, silent=False)
+                in_sample_scenarios, alpha=alpha, beta=b, silent=silent)
 
         elif scheme == "one_price":
             _, p_DA_vec, _, profit_matrix, cvar, _ = solve_risk_averse_one_price(
-                in_sample_scenarios, alpha=alpha, beta=b, silent=False)
+                in_sample_scenarios, alpha=alpha, beta=b, silent=silent)
 
         profit_per_scenario = profit_matrix.sum(axis=0)
         expected_profit = profit_per_scenario.mean()
@@ -1124,7 +1125,7 @@ def compute_profit_cvar_tradeoff(in_sample_scenarios, beta_range, alpha=0.9, sch
     return exp_profit, cvar_list, p_DA_all
 
 
-def plot_DA_offers_risk(beta_range, p_DA_list, tol=1e-6):
+def plot_DA_offers_risk(beta_range, p_DA_list, tol=1e-6, title="Day-ahead offers for different β"):
     """
     Visualize day-ahead offers across different risk-aversion weights and group identical strategies.
     
@@ -1194,7 +1195,7 @@ def plot_DA_offers_risk(beta_range, p_DA_list, tol=1e-6):
     # --- Styling (match your original)
     plt.xlabel("Hour", fontsize=16)
     plt.ylabel("DA Offer (MW)", fontsize=16)
-    #plt.title("Day-ahead offers for different β", fontsize=)
+    plt.title(title, fontsize=20)
 
     plt.xticks(np.arange(24), fontsize=12)
     plt.yticks(fontsize=12)
@@ -1499,6 +1500,118 @@ def plot_boxplot_profit_cvar(profit_list, cvar_list, base_profit, base_cvar):
     plt.grid(axis='y', alpha=0.3)
     plt.legend(fontsize=16)
     plt.show()
+
+def plot_scenarios(scenarios):
+    imbalance_scenarios = np.array([
+        scenarios[:, sd_i, 2]  # w_i = 0, p_i = 0
+        for sd_i in range(4)
+    ])
+
+    price_scenarios = np.array([
+        scenarios[:, p_i * 4, 1]   # w_i = 0, sd_i = 0
+        for p_i in range(20)
+    ])
+
+    wind_scenarios = np.array([
+        scenarios[:, w_i * 80, 0]   # p_i = 0, sd_i = 0
+        for w_i in range(20)
+    ])
+
+    n_w = 20
+    n_p = 20
+    n_sd = 4
+
+    hours = np.arange(24)
+    fig, axes = plt.subplots(3, 1, figsize=(12, 12), sharex=True)
+
+    # ----------------------
+    # WIND (20 distinct)
+    # ----------------------
+    for i in range(20):
+        axes[0].plot(hours, wind_scenarios[i], alpha=0.7)
+
+    axes[0].set_title("20 Wind Scenarios (Distinct)")
+    axes[0].set_ylabel("Wind Production")
+    axes[0].grid(True)
+
+    # ----------------------
+    # PRICE (20 distinct)
+    # ----------------------
+    for i in range(20):
+        axes[1].plot(hours, price_scenarios[i], alpha=0.7)
+
+    axes[1].set_title("20 Price Scenarios (Distinct)")
+    axes[1].set_ylabel("Price")
+    axes[1].grid(True)
+
+    # ----------------------
+    # IMBALANCE HEATMAP (4 distinct)
+    # ----------------------
+    heatmap_data = np.where(imbalance_scenarios == 1, 1, -1)
+
+    im = axes[2].imshow(
+        heatmap_data,
+        aspect='auto',
+        cmap='bwr',
+        vmin=-1,
+        vmax=1
+    )
+
+    axes[2].set_title("4 Imbalance Scenarios")
+    axes[2].set_ylabel("Scenario")
+    axes[2].set_xlabel("Hour")
+
+    axes[2].set_yticks(np.arange(4))
+    axes[2].set_yticklabels([f"SD {i}" for i in range(4)])
+
+    # grid for clarity
+    axes[2].set_xticks(np.arange(-.5, 24, 1), minor=True)
+    axes[2].set_yticks(np.arange(-.5, 4, 1), minor=True)
+    axes[2].grid(which='minor', color='black', linestyle='-', linewidth=0.5)
+    axes[2].tick_params(which='minor', bottom=False, left=False)
+
+    # colorbar
+    cbar = fig.colorbar(im, ax=axes[2])
+    cbar.set_ticks([-1, 1])
+    cbar.set_ticklabels(["Surplus", "Deficit"])
+
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_deficit_probabilities(folds):
+    deficit_probs_all = np.array([
+        fold[:, :, 2].mean(axis=1) for fold in folds
+    ])
+
+    hours = np.arange(0, 24)
+
+    labelsize = 16
+    ticksize = 12
+    titlesize= 20
+    legendsize = 16
+
+    plt.figure(figsize=(12, 4))
+
+    for i in range(deficit_probs_all.shape[0]):
+        plt.step(hours, deficit_probs_all[i], where='pre', alpha=0.7)
+
+    plt.axhline(0.375, linestyle='--', label="Threshold (0.375)")
+
+    plt.xlabel("Hour", fontsize=labelsize)
+    plt.ylabel("Deficit Probability", fontsize=labelsize)
+    plt.xlim(0,23)
+    plt.xticks(hours, fontsize=ticksize)
+    plt.yticks(fontsize=ticksize)
+    plt.title("Deficit Probability per Fold", fontsize=titlesize)
+    plt.legend(fontsize=legendsize)
+    plt.grid(True, alpha=0.3)
+
+    plt.show()
+
+
+
+
 
 
 def Load_profile_generation(random_state=None, Profiles=300, P_max=600, P_min=220, P_delta=35, plot=False):
@@ -1975,4 +2088,165 @@ def plot_Pxx_comparison(alsox_results_df, title="Reliability requirement compari
     ax1.grid(True, alpha=0.3)
     ax1.set_title(title)
     fig.tight_layout()
+    plt.show()
+
+
+
+
+
+def generate_violation_samples(n_runs=50, n_profiles_total=300, n_insample_profiles=100, epsilon=0.1):
+
+	results = []
+
+	# MONTE CARLO LOOP
+	for seed in range(n_runs):
+
+		print(f"\nRunning seed {seed}")
+		rng = np.random.default_rng(seed)
+		
+		# Generate load profiles
+		Load_profiles = Load_profile_generation(
+			random_state=seed,
+			Profiles=n_profiles_total,
+			P_max=600,
+			P_min=220,
+			P_delta=35,
+			plot=False
+		)
+
+		# In-sample / out-of-sample split
+		idx = rng.choice(Load_profiles.shape[0],size=n_insample_profiles,replace=False)
+		in_sample_profiles = Load_profiles[idx, :]
+		out_idx = np.setdiff1d(np.arange(Load_profiles.shape[0]),idx)
+		out_sample_profiles = Load_profiles[out_idx, :]
+
+		# ALSO-X
+		q = epsilon * n_insample_profiles * 60
+		m, c_up_AlsoX, y, F_up_AlsoX = Optimal_reserve_bid_ALSO_X(
+			in_sample_profiles,
+			q,
+			M=10**4,
+			silent=True
+		)
+
+		# CVaR
+		m, c_up_CVaR, beta, zeta, F_up_CVaR = Optimal_reserve_bid_CVaR(
+			in_sample_profiles,
+			epsilon,
+			silent=True
+		)
+
+		# ------------------------
+		# OUT-OF-SAMPLE EVALUATION
+		# ------------------------
+
+		n_out_profiles, n_minutes = out_sample_profiles.shape
+		n_points = n_out_profiles * n_minutes
+
+		# ALSO-X point violations
+		not_available_AlsoX_mask = (out_sample_profiles < c_up_AlsoX)
+		share_not_available_AlsoX = (not_available_AlsoX_mask.sum() / n_points)
+		# CVaR point violations
+		not_available_CVaR_mask = (out_sample_profiles < c_up_CVaR)
+		share_not_available_CVaR = (not_available_CVaR_mask.sum() / n_points)
+
+		# Profile-level violations (>6 minutes)
+		profiles_with_violation_AlsoX = (not_available_AlsoX_mask.sum(axis=1) > 6)
+		profiles_with_violation_CVaR = (not_available_CVaR_mask.sum(axis=1) > 6)
+
+		share_profiles_with_violation_AlsoX = (profiles_with_violation_AlsoX.mean())
+
+		share_profiles_with_violation_CVaR = (profiles_with_violation_CVaR.mean())
+
+		# Mean shortfalls
+		mean_shortfall_AlsoX = np.maximum(c_up_AlsoX - out_sample_profiles,0).mean()
+
+		mean_shortfall_CVaR = np.maximum(c_up_CVaR - out_sample_profiles,0).mean()
+
+		# SAVE RESULTS
+		results.append({
+			"seed": seed,
+			"c_up_AlsoX": c_up_AlsoX,
+			"c_up_CVaR": c_up_CVaR,
+			"beta_CVaR": beta,
+			"point_violation_AlsoX":share_not_available_AlsoX,
+			"point_violation_CVaR":share_not_available_CVaR,
+			"profile_violation_AlsoX":share_profiles_with_violation_AlsoX,
+			"profile_violation_CVaR":share_profiles_with_violation_CVaR,
+			"mean_shortfall_AlsoX":mean_shortfall_AlsoX,
+			"mean_shortfall_CVaR":mean_shortfall_CVaR})
+
+	# Return dataframe
+	return pd.DataFrame(results)
+
+
+
+
+
+def plot_boxplot_violations(df_results):
+    fig, axes = plt.subplots(1, 2, figsize=(12, 6))
+
+    # -------------------------------------------------
+    # Point violations
+    # -------------------------------------------------
+
+    data_point = [
+        df_results["point_violation_AlsoX"],
+        df_results["point_violation_CVaR"]
+    ]
+
+    box1 = axes[0].boxplot(
+        data_point,
+        patch_artist=True,
+        tick_labels=["ALSO-X", "CVaR"]
+    )
+
+    colors = ["#b2b2b2", "#b2b2b2"]
+
+    for patch, color in zip(box1['boxes'], colors):
+        patch.set_facecolor(color)
+
+    for median in box1['medians']:
+        median.set_color('black')
+        median.set_linewidth(2)
+
+    axes[0].set_title("Point Violations", fontsize=18)
+    axes[0].set_ylabel("Violation Share", fontsize=16)
+
+    axes[0].tick_params(axis='x', labelsize=16)
+    axes[0].tick_params(axis='y', labelsize=12)
+
+    axes[0].grid(axis='y', alpha=0.3)
+    axes[0].set_ylim(bottom=0)
+    # -------------------------------------------------
+    # Profile violations
+    # -------------------------------------------------
+
+    data_profile = [
+        df_results["profile_violation_AlsoX"],
+        df_results["profile_violation_CVaR"]
+    ]
+
+    box2 = axes[1].boxplot(
+        data_profile,
+        patch_artist=True,
+        tick_labels=["ALSO-X", "CVaR"]
+    )
+
+    for patch, color in zip(box2['boxes'], colors):
+        patch.set_facecolor(color)
+
+    for median in box2['medians']:
+        median.set_color('black')
+        median.set_linewidth(2)
+
+    axes[1].set_title("Profile Violations", fontsize=18)
+    axes[1].set_ylabel("Violation Share", fontsize=16)
+
+    axes[1].tick_params(axis='x', labelsize=16)
+    axes[1].tick_params(axis='y', labelsize=12)
+
+    axes[1].grid(axis='y', alpha=0.3)
+    plt.ylim(bottom=0)
+    plt.tight_layout()
     plt.show()

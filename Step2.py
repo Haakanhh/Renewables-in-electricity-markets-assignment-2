@@ -3,11 +3,14 @@ import importlib
 import numpy as np
 import pandas as pd
 import usefulfunctions as uf
-import matplotlib.pyplot as plt
-import time
 
+# Ensure newest version of usefulfunctions is used
 importlib.reload(uf)
 
+# prints appendix if true 
+APPENDIX = False
+
+# Set seed, 40 have been used for step 2
 seed = 40
 rng = np.random.default_rng(seed)
 
@@ -151,4 +154,18 @@ alsox_results_df["share_not_available"] = alsox_results_df["c_up_AlsoX"].apply(l
 # The actual plot
 uf.plot_Pxx_comparison(alsox_results_df)
 
-# %%
+
+
+
+
+
+#%% -------------------
+# APPENDIX
+# ---------------------
+
+if APPENDIX:
+	# Save out-of-sample violation results from 50 different seeds
+	df_violations = uf.generate_violation_samples(n_runs=50)
+
+	# Plot distribution
+	uf.plot_boxplot_violations(df_violations)
