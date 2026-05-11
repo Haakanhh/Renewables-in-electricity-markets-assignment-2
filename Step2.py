@@ -129,7 +129,7 @@ alsox_results_df = pd.DataFrame(alsox_results)
 
 
 #%% Plot comparison of reliability requirements
-
+importlib.reload(uf)
 # Add reliability requirement (Pxx)
 alsox_results_df["Reliability requirement"] = alsox_results_df["epsilon"].apply(lambda e: f"P{int((1-e)*100)}")
 
@@ -141,31 +141,29 @@ alsox_results_df["mean_shortfall"] = alsox_results_df["c_up_AlsoX"].apply(
 # The plot funciton for comparison of reliability requirements
 uf.plot_Pxx_comparison_mean(alsox_results_df)
 
-#%% Appendix table 
-# The values of c_up_AlsoX and shortfall expressed as percentages from their starting value at P80
-normalized_df = uf.compute_normalized_Pxx_metrics(alsox_results_df, p_min=80, p_max=100, verbose=True)
-
-
-#%% Extra plot - optimal bid vs expected reserve shortfall
-
-# Calculate share of unavailable points for each reliability requirement
-alsox_results_df["share_not_available"] = alsox_results_df["c_up_AlsoX"].apply(lambda c: (out_sample_profiles < c).sum() / n_points *100)
-
-# The actual plot
-uf.plot_Pxx_comparison(alsox_results_df)
-
-
-
-
-
+uf.plot_Pxx_comparison_normalized(alsox_results_df)
 
 #%% -------------------
 # APPENDIX
 # ---------------------
 
 if APPENDIX:
+	# The values of c_up_AlsoX and shortfall expressed as percentages from their starting value at P80
+	normalized_df = uf.compute_normalized_xPxx_metrics(alsox_results_df, p_min=60, p_max=100, verbose=True)
+	
+	normalized_df["pct_magnitude"] = normalized_df["c_up_pct"] / normalized_df["shortfall_pct"]
+
+	#Extra plot - optimal bid vs expected reserve shortfall
+	# Calculate share of unavailable points for each reliability requirement
+	alsox_results_df["share_not_available"] = alsox_results_df["c_up_AlsoX"].apply(lambda c: (out_sample_profiles < c).sum() / n_points *100)
+
+	# The actual plot
+	uf.plot_Pxx_comparison(alsox_results_df)
+
 	# Save out-of-sample violation results from 50 different seeds
 	df_violations = uf.generate_violation_samples(n_runs=50)
 
 	# Plot distribution
 	uf.plot_boxplot_violations(df_violations)
+
+# %%
