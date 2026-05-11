@@ -1484,6 +1484,27 @@ def plot_boxplot_profit_cvar(profit_list, cvar_list, base_profit, base_cvar):
     plt.show()
 
 def plot_scenarios(scenarios):
+    """
+    Visualize representative wind, price, and imbalance scenarios.
+    
+    Parameters:
+    -----------
+    scenarios : np.ndarray
+        Array of shape (n_hours, n_scenarios, 3) containing:
+        - scenarios[:, :, 0]: wind production scenarios [MWh]
+        - scenarios[:, :, 1]: day-ahead price scenarios [MDKK/MWh]
+        - scenarios[:, :, 2]: system imbalance states
+          (1 = deficit, 0 = surplus)
+          
+    Returns:
+    --------
+    None
+        Displays:
+        - Line plots of representative wind production scenarios
+        - Line plots of representative price scenarios
+        - A heatmap of imbalance scenarios indicating deficit/surplus states
+          across the scheduling horizon.
+    """
     imbalance_scenarios = np.array([
         scenarios[:, sd_i, 2]  # w_i = 0, p_i = 0
         for sd_i in range(4)
@@ -1512,8 +1533,8 @@ def plot_scenarios(scenarios):
     for i in range(20):
         axes[0].plot(hours, wind_scenarios[i], alpha=0.7)
 
-    axes[0].set_title("20 Wind Scenarios (Distinct)")
-    axes[0].set_ylabel("Wind Production")
+    axes[0].set_title("20 Wind Scenarios", fontsize=18)
+    axes[0].set_ylabel("Wind Production [MWh]", fontsize=16)
     axes[0].grid(True)
 
     # ----------------------
@@ -1522,8 +1543,8 @@ def plot_scenarios(scenarios):
     for i in range(20):
         axes[1].plot(hours, price_scenarios[i], alpha=0.7)
 
-    axes[1].set_title("20 Price Scenarios (Distinct)")
-    axes[1].set_ylabel("Price")
+    axes[1].set_title("20 Price Scenarios", fontsize=18)
+    axes[1].set_ylabel("Price [MDKK/MWh]")
     axes[1].grid(True)
 
     # ----------------------
@@ -1539,9 +1560,9 @@ def plot_scenarios(scenarios):
         vmax=1
     )
 
-    axes[2].set_title("4 Imbalance Scenarios")
-    axes[2].set_ylabel("Scenario")
-    axes[2].set_xlabel("Hour")
+    axes[2].set_title("4 Imbalance Scenarios", fontsize=18)
+    axes[2].set_ylabel("Scenario", fontsize=16)
+    axes[2].set_xlabel("Hour", fontsize=16)
 
     axes[2].set_yticks(np.arange(4))
     axes[2].set_yticklabels([f"SD {i}" for i in range(4)])
@@ -1562,6 +1583,25 @@ def plot_scenarios(scenarios):
 
 
 def plot_deficit_probabilities(folds):
+    """
+    Visualize the probability of system deficit across hours for each cross-validation fold.
+    
+    The deficit probability is computed as the fraction of scenarios in each fold
+    where a deficit state (indicator = 1) occurs at each hour.
+    
+    Parameters:
+    -----------
+    folds : list of np.ndarray
+        List of scenario folds, where each fold has shape (n_hours, n_scenarios, 3).
+        The third dimension contains:
+        - index 2: imbalance indicator (1 = deficit, 0 = surplus)
+        
+    Returns:
+    --------
+    None
+        Displays a step plot showing deficit probability per hour for each fold,
+        including a reference threshold line.
+    """
     deficit_probs_all = np.array([
         fold[:, :, 2].mean(axis=1) for fold in folds
     ])
@@ -1590,8 +1630,6 @@ def plot_deficit_probabilities(folds):
     plt.grid(True, alpha=0.3)
 
     plt.show()
-
-
 
 
 

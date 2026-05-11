@@ -236,3 +236,5 @@ if (APPENDIX):
     average_wind_overall = in_sample_scenarios[:, :, 0].mean()
     print(f"\nAverage wind in worst-case scenarios: {average_wind_worst:.3f}")
     print(f"Average wind overall: {average_wind_overall:.3f}")
+
+# %%
