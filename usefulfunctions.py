@@ -157,7 +157,7 @@ def solve_stochastic_strategy_one_price(in_sample_scenarios, silent=False):
     Delta : gurobipy.tupledict
         Variable dictionary of shape (24, n_scenarios) representing the difference between 
         real production and day-ahead offer for each hour and scenario.
-    profit_matrix : np.ndarray
+    matrix : np.ndarray
         Array of shape (24, n_scenarios) containing profit per hour and scenario in MDKK.
     """
     
@@ -1654,6 +1654,7 @@ def Load_profile_generation(random_state=None, Profiles=300, P_max=600, P_min=22
         plt.hist(profiles.flatten(), bins=40)
         plt.xlabel("Load [kW]", fontsize=16)
         plt.ylabel("Frequency", fontsize=16)
+        plt.title("Distribution of generated loads", fontsize=22)
         plt.xticks(fontsize=13)
         plt.yticks(fontsize=13)
         plt.show()

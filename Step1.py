@@ -6,7 +6,7 @@ import usefulfunctions as uf
 # Ensure newest version of usefulfunctions
 importlib.reload(uf)
 
-# Prints appendix if true
+# Prints Appendix if true
 APPENDIX = False
 
 # Set seed, 42 have been used for step 1
@@ -31,6 +31,7 @@ profit_per_hour = profit_matrix.mean(axis=1)
 profit_per_scenario = profit_matrix.sum(axis=0)
 
 # Print expected profit and day-ahead offers
+print("One-price results:")
 print("Expected Profit (One-Price):", round(m.ObjVal, 3), "MDKK")
 print(f"Min profit (One-price): {profit_per_scenario.min():.2f} MDKK")
 print(f"Max profit (One-price): {profit_per_scenario.max():.2f} MDKK")
@@ -42,9 +43,7 @@ uf.plot_DA_offers(p_DA, in_sample_scenarios, title=None, Threshold_value=0.375)
 # Plot profit distribution per scenario
 uf.plot_profit_distribution(profit_per_scenario, n_bins = 30, title="Profit distribution per scenario in one-price system")
 
-#uf.plot_cumulative_profit_distribution(profit_per_scenario, title="Cumulative profit distribution - One-price")
-uf.plot_cumulative_profit_distribution(profit_per_scenario, title=None)
-
+uf.plot_cumulative_profit_distribution(profit_per_scenario, title="Cumulative profit distribution - One-price")
 
 #%% ----------------------
 # Task 1.2) Offering Strategy Under a Two-Price Balancing Scheme
@@ -57,6 +56,7 @@ profit_per_hour_2 = profit_matrix_2.mean(axis=1)
 profit_per_scenario_2 = profit_matrix_2.sum(axis=0)
 
 # Print expected profit and day-ahead offers
+print("Two-price results:")
 print("Expected Profit (Two-Price):", round(m_2.ObjVal,3), "MDKK")
 print(f"Min profit (Two-price): {profit_per_scenario_2.min():.2f} MDKK")
 print(f"Max profit (Two-price): {profit_per_scenario_2.max():.2f} MDKK")
@@ -73,14 +73,13 @@ uf.plot_profit_distribution_comparison(profit_per_scenario, profit_per_scenario_
 #%% -----------------------
 # Task 1.3) Cross-Validation of Offering Strategies
 # -------------------------
-importlib.reload(uf)
 
 # Create 8 folds
 folds = uf.create_folds(scenarios, n_in_sample=200, seed=rng) # Creates a list of arrays, each of shape (24, 200, 3)
 
 # One-price cross-validation
 in_sample_means_one, out_sample_means_one = uf.cross_validate_folds(folds, two_price=False)
-
+print("One-Price cross-validation results:")
 print(f"One-Price mean in-sample profit:  {np.mean(in_sample_means_one):.15f} MDKK")
 print(f"One-Price mean out-of-sample profit: {np.mean(out_sample_means_one):.15f} MDKK")
 print(f"Std in-sample profit:   {np.std(in_sample_means_one):.3f}")
@@ -96,6 +95,7 @@ uf.plot_deficit_probabilities(folds)
 # Two_Price cross-validation
 in_sample_means_two, out_sample_means_two = uf.cross_validate_folds(folds, two_price=True)
 
+print("Two-Price cross-validation results:")
 print(f"Two-Price mean in-sample profit:  {np.mean(in_sample_means_two):.15f} MDKK")
 print(f"Two-Price mean out-of-sample profit: {np.mean(out_sample_means_two):.15f} MDKK")
 print(f"Std in-sample profit:   {np.std(in_sample_means_two):.3f}")
@@ -178,9 +178,11 @@ uf.plot_cdf_comparison(profit_per_scenario_risk_2, profit_per_scenario_2, label_
 #%% EXAMINE VARIATION IN FOLD OR INPUT DATA
 
 # Plot DA offers for different folds under risk aversion
+print("DA offers for risk-averse solution on different folds:")
 uf.plot_DA_offer_folds(folds)
 
 # Compute DA offers and profits with 100 different input seeds
+print("Computing 100 different DA offers based on different input seeds:")
 p_da_list, profits, cvar = uf.compute_DA_offer_samples(n_runs=100)
 
 profits_day = profits.sum(axis=1)

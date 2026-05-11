@@ -15,6 +15,11 @@ The two main entry points are:
  
 - [Data/](Data): contains the two input datasets used in Step 1 to generate hourly scenarios. The data files is described below.
 
+In order to ensure reproduction of results, a seed has been set at the top of both Step1 and Step2. 
+
+For Step1, the seed is 42
+
+For Step2, the seed is 40
 
 For both Step1 and Step2, appendix can be seen by setting APPENDIX=True at the top of the document. Furthermore, many of the model outputs have been silenced to reduce amount of printed statements. If you want to see more details from model outputs, set SILENT=True for the specific function where it is wanted.
 

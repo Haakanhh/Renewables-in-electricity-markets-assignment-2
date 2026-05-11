@@ -36,7 +36,7 @@ print("ALSO-X:")
 q = epsilon*n_insample_profiles*60
 
 # Solve ALSO-X optimization problem
-m, c_up_AlsoX, y, F_up_AlsoX =uf.Optimal_reserve_bid_ALSO_X (in_sample_profiles, q, M=10**4, silent=False)
+m, c_up_AlsoX, y, F_up_AlsoX =uf.Optimal_reserve_bid_ALSO_X (in_sample_profiles, q, M=380, silent=False)
 
 print(f"The optimal reserve bid (ALSO-X): {c_up_AlsoX}")
 
@@ -119,7 +119,7 @@ for epsilon in epsilon_values:
 	q = epsilon * n_insample_profiles * 60
 
 	# Solve ALSO-X optimization problem
-	m, c_up_AlsoX, y, F_up_AlsoX = uf.Optimal_reserve_bid_ALSO_X(in_sample_profiles, q, M=10**4, silent=True)
+	m, c_up_AlsoX, y, F_up_AlsoX = uf.Optimal_reserve_bid_ALSO_X(in_sample_profiles, q, M=380, silent=True)
 
 	alsox_results.append({"epsilon": epsilon, "q": q, "c_up_AlsoX": c_up_AlsoX})
 	print(f"Epsilon:{epsilon:.2f}, Optimal reserve bid (ALSO-X): {c_up_AlsoX}")
@@ -129,7 +129,7 @@ alsox_results_df = pd.DataFrame(alsox_results)
 
 
 #%% Plot comparison of reliability requirements
-importlib.reload(uf)
+
 # Add reliability requirement (Pxx)
 alsox_results_df["Reliability requirement"] = alsox_results_df["epsilon"].apply(lambda e: f"P{int((1-e)*100)}")
 
@@ -141,15 +141,13 @@ alsox_results_df["mean_shortfall"] = alsox_results_df["c_up_AlsoX"].apply(
 # The plot funciton for comparison of reliability requirements
 uf.plot_Pxx_comparison_mean(alsox_results_df)
 
-uf.plot_Pxx_comparison_normalized(alsox_results_df)
-
 #%% -------------------
 # APPENDIX
 # ---------------------
 
 if APPENDIX:
 	# The values of c_up_AlsoX and shortfall expressed as percentages from their starting value at P80
-	normalized_df = uf.compute_normalized_Pxx_metrics(alsox_results_df, p_min=60, p_max=100, verbose=True)
+	normalized_df = uf.compute_normalized_Pxx_metrics(alsox_results_df, p_min=80, p_max=100, verbose=True)
 	
 	normalized_df["pct_magnitude"] = normalized_df["c_up_pct"] / normalized_df["shortfall_pct"]
 
