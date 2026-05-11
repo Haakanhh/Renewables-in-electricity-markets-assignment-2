@@ -149,7 +149,7 @@ uf.plot_Pxx_comparison_normalized(alsox_results_df)
 
 if APPENDIX:
 	# The values of c_up_AlsoX and shortfall expressed as percentages from their starting value at P80
-	normalized_df = uf.compute_normalized_xPxx_metrics(alsox_results_df, p_min=60, p_max=100, verbose=True)
+	normalized_df = uf.compute_normalized_Pxx_metrics(alsox_results_df, p_min=60, p_max=100, verbose=True)
 	
 	normalized_df["pct_magnitude"] = normalized_df["c_up_pct"] / normalized_df["shortfall_pct"]
 

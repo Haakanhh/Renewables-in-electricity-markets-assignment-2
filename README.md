@@ -16,6 +16,8 @@ The two main entry points are:
 - [Data/](Data): contains the two input datasets used in Step 1 to generate hourly scenarios. The data files is described below.
 
 
+For both Step1 and Step2, appendix can be seen by setting APPENDIX=True at the top of the document. Furthermore, many of the model outputs have been silenced to reduce amount of printed statements. If you want to see more details from model outputs, set SILENT=True for the specific function where it is wanted.
+
 ## Data Files
 
 ### `Data/DayAheadPrices_DK2.csv`

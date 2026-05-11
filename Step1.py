@@ -7,7 +7,7 @@ import usefulfunctions as uf
 importlib.reload(uf)
 
 # Prints appendix if true
-APPENDIX = True
+APPENDIX = False
 
 # Set seed, 42 have been used for step 1
 seed = 42

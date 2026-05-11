@@ -265,7 +265,6 @@ def solve_stochastic_strategy_two_price(in_sample_scenarios, silent=False):
 
     # Variables
     p_DA = m.addVars(n_hours, lb=0, name="DayAhead offer")
-    #Delta = m.addVars(n_hours, n_scenarios, lb=-gp.GRB.INFINITY, ub=gp.GRB.INFINITY, name="Difference_DA_real")
     Delta_up = m.addVars(n_hours, n_scenarios, lb=0, name="difference over 0")
     Delta_down = m.addVars(n_hours, n_scenarios, lb=0, name="difference under 0")
 
@@ -284,18 +283,7 @@ def solve_stochastic_strategy_two_price(in_sample_scenarios, silent=False):
     # Constraints setting limits for Delta up and down
     for t in range(n_hours):
         for s in range(n_scenarios):
-            #m.addConstr(Delta_up[t, s] - Delta_down[t, s] == p_real[t, s] - p_DA[t])
             m.addConstr(Delta_up[t, s] - Delta_down[t, s] == p_real[t, s] - p_DA[t], name=f"Difference_DA_real_{t}_{s}")
-            #m.addConstr(Delta[t, s] == Delta_up[t, s] - Delta_down[t, s], name=f"Difference_split_{t}_{s}")
-
-    
-    #b = m.addVars(n_hours, n_scenarios, vtype=gp.GRB.BINARY, name="split_bin")
-    #M = P_nom  # natural upper bound, since imbalance can't exceed wind capacity
-
-    #for t in range(n_hours):
-    #    for s in range(n_scenarios):
-    #        m.addConstr(Delta_up[t, s]   <= M * b[t, s])
-    #        m.addConstr(Delta_down[t, s] <= M * (1 - b[t, s]))
 
     # Optimize
     m.optimize()
@@ -598,12 +586,6 @@ def plot_cdf_comparison(
     plt.legend(fontsize=13)
     plt.tight_layout()
     plt.show()
-
-
-def scenario_profit_stats(profit_matrix):
-    profit_per_scenario = profit_matrix.sum(axis=0)
-    return profit_per_scenario.min(), profit_per_scenario.max()
-
 
 
 def plot_profit_distribution_comparison(profit_per_scenario, profit_per_scenario_2, n_bins=15):
@@ -2093,7 +2075,36 @@ def plot_Pxx_comparison(alsox_results_df, title="Reliability requirement compari
 
 
 def generate_violation_samples(n_runs=50, n_profiles_total=300, n_insample_profiles=100, epsilon=0.1):
-
+	"""
+	Perform a Monte Carlo study comparing ALSO-X and CVaR reserve bidding strategies.
+	
+	Parameters:
+	-----------
+	n_runs : int, optional
+		Number of Monte Carlo repetitions with different random seeds, default 50.
+	n_profiles_total : int, optional
+		Total number of generated load profiles per run, default 300.
+	n_insample_profiles : int, optional
+		Number of profiles used for optimization (training set), default 100.
+	epsilon : float, optional
+		Risk tolerance parameter used in BOTH ALSO-X and CVaR formulations,
+		default 0.1 corresponding to a P90 reliability level.
+		
+	Returns:
+	--------
+	pd.DataFrame
+		DataFrame containing Monte Carlo results for each seed with columns:
+		- "seed": random seed used for the run
+		- "c_up_AlsoX": optimal reserve bid from ALSO-X [kW]
+		- "c_up_CVaR": optimal reserve bid from CVaR [kW]
+		- "beta_CVaR": optimal beta value from CVaR
+		- "point_violation_AlsoX": share of out-of-sample point violations for ALSO-X
+		- "point_violation_CVaR": share of out-of-sample point violations for CVaR
+		- "profile_violation_AlsoX": share of profiles violating the 6-minute rule for ALSO-X
+		- "profile_violation_CVaR": share of profiles violating the 6-minute rule for CVaR
+		- "mean_shortfall_AlsoX": mean reserve shortfall for ALSO-X [kW]
+		- "mean_shortfall_CVaR": mean reserve shortfall for CVaR [kW]
+	"""
 	results = []
 
 	# MONTE CARLO LOOP
@@ -2182,6 +2193,27 @@ def generate_violation_samples(n_runs=50, n_profiles_total=300, n_insample_profi
 
 
 def plot_boxplot_violations(df_results):
+    """
+    Visualize Monte Carlo sampled violation statistics for ALSO-X and CVaR formulations.
+    
+    Parameters:
+    -----------
+    df_results : pd.DataFrame
+        DataFrame containing Monte Carlo results with columns:
+        - "point_violation_AlsoX": share of point violations for ALSO-X
+        - "point_violation_CVaR": share of point violations for CVaR
+        - "profile_violation_AlsoX": share of profile violations for ALSO-X
+        - "profile_violation_CVaR": share of profile violations for CVaR
+        
+    Returns:
+    --------
+    None
+        Displays side-by-side boxplots comparing:
+        - Point-wise violation shares
+        - Profile-level violation shares
+        for ALSO-X and CVaR reserve bidding strategies.
+    """
+
     fig, axes = plt.subplots(1, 2, figsize=(12, 6))
 
     # -------------------------------------------------
